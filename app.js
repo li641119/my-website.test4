@@ -34,8 +34,9 @@ onAuthStateChanged(auth, user => {
     const studentView = document.getElementById('student-view'); 
 
     if (user) {
-        // 1. 登入成功
+        console.log("當前登入者:", user.email);
         loginContainer.style.display = 'none';
+        mainApp.style.display = 'flex'; // 無論是誰，主容器都要打開
         
         // 2. 身分分流判斷
         if (user.email === COACH_EMAIL) {
@@ -54,11 +55,12 @@ onAuthStateChanged(auth, user => {
             // --- 學生模式 ---
             coachView.style.display = 'none';
             studentView.style.display = 'block';
-    
+            console.log("啟動學生模式");
             // 啟動「只抓自己課程」的同步
             startStudentLiveSync(user.email);}
         } else {
         // 3. 登出狀態
+            console.log("目前為登出狀態");
             loginContainer.style.display = 'block';
             mainApp.style.display = 'none';
             coachView.style.display = 'none';
