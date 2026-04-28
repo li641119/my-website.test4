@@ -52,18 +52,18 @@ onAuthStateChanged(auth, user => {
             if (window.updateStats) window.updateStats();
         } else {
             // --- 學生模式 ---
-            mainApp.style.display = 'block'; // 學生不需要 flex sidebar，或是你自訂佈局
             coachView.style.display = 'none';
             studentView.style.display = 'block';
-            console.log("學生模式：顯示個人頁面");
-        }
-    } else {
+    
+            // 啟動「只抓自己課程」的同步
+            startStudentLiveSync(user.email);}
+        } else {
         // 3. 登出狀態
-        loginContainer.style.display = 'block';
-        mainApp.style.display = 'none';
-        coachView.style.display = 'none';
-        studentView.style.display = 'none';
-        if (unsubscribe) unsubscribe(); // 登出時停止監聽
+            loginContainer.style.display = 'block';
+            mainApp.style.display = 'none';
+            coachView.style.display = 'none';
+            studentView.style.display = 'none';
+            if (unsubscribe) unsubscribe(); // 登出時停止監聽
     }
 });
 
@@ -88,21 +88,23 @@ document.getElementById('login-form').addEventListener('submit', (e) => {
         });
 });
 
-function startLiveSync() {
-    console.log("🔒 啟動個人資料同步(教練視角)...");
-    if (unsubscribe) unsubscribe(); // 避免重複監聽
+function startStudentLiveSync(studentEmail) {
+    console.log(`🔒 正在下載 ${studentEmail} 的專屬課程...`);
+    if (unsubscribe) unsubscribe();
 
-    const q = query(collection(db, "events"));
-    
+    // 關鍵：只抓取 studentEmail 等於當前登入者 Email 的資料
+    const q = query(
+        collection(db, "events"), 
+        where("studentEmail", "==", studentEmail)
+    );
+
     unsubscribe = onSnapshot(q, (snapshot) => {
         const myEvents = [];
         snapshot.forEach((doc) => {
-            const data = doc.data();
-            const eventWithId = { ...data, id: data.id || doc.id };
-            myEvents.push(eventWithId);
+            myEvents.push({ ...doc.data(), id: doc.id });
         });
         
-        console.log("🔔 收到個人雲端更新，共有資料：", myEvents.length);
+        console.log("🔔 學生收到更新，課程數量：", myEvents.length);
         if (window.updateCalendarUI) {
             window.updateCalendarUI(myEvents);
         }
@@ -111,16 +113,23 @@ function startLiveSync() {
 
 window.uploadEvent = async (eventData) => {
     try {
-        const currentUser = auth.currentUser;
-        if (currentUser) {
-            eventData.studentId = currentUser.uid;
+        // 1. 根據學生姓名去 students 表查找 Email
+        const studentRef = doc(db, "students", eventData.title); // 假設文件 ID 就是姓名
+        const studentSnap = await getDoc(studentRef);
+        
+        if (studentSnap.exists()) {
+            // 2. 找到 Email 了，自動補進 eventData
+            eventData.studentEmail = studentSnap.data().email;
+        } else {
+            console.warn("找不到此學生的對照 Email，學生登入後將看不到此課程");
         }
 
+        // 3. 儲存到原本的 events 集合
         const eventId = eventData.id.toString();
         await setDoc(doc(db, "events", eventId), eventData);
-        console.log("✅ 雲端上傳成功！");
+        console.log("✅ 課程已關聯學生帳號並上傳成功！");
     } catch (e) {
-        console.error("❌ 雲端上傳失敗:", e);
+        console.error("❌ 上傳失敗:", e);
     }
 };
 
