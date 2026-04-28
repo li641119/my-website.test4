@@ -66,8 +66,19 @@
 </div>
 
 <div id="student-view" style="display: none; padding: 50px; text-align: center;">
-    <h1>歡迎使用學生系統</h1>
-    <p>個人課程統計功能開發中，敬請期待！</p>
+    <div class="student-header" style="padding: 20px; background: #f8f9fa; border-bottom: 1px solid #ddd;">
+        <h2 id="student-welcome-msg">您好，同學！</h2>
+        <div style="display: flex; gap: 15px; margin-top: 10px;">
+            <div style="background: white; padding: 10px 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                <span style="color: #666;">本月總時數：</span>
+                <span id="student-total-hours" style="font-weight: bold; color: #1976d2;">0</span> 小時
+            </div>
+        </div>
+    </div>
+
+    <div class="calendar-container">
+        <div id="student-calendar-grid"></div> 
+    </div>
 </div>
 
 <div id="eventModal" class="modal">
