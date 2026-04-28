@@ -84,16 +84,37 @@ function startLiveSync() {
 }
 
 function startStudentLiveSync(studentEmail) {
-    console.log(`🔒 正在下載 ${studentEmail} 的專屬課程...`);
+    console.log(`🔒學生模式：正在同步 ${studentEmail} 的課程...`);
     if (unsubscribe) unsubscribe();
-    const q = query(collection(db, "events"), where("studentEmail", "==", studentEmail));
+
+    const q = query(
+        collection(db, "events"), 
+        where("studentEmail", "==", studentEmail)
+    );
     unsubscribe = onSnapshot(q, (snapshot) => {
         const myEvents = [];
+        let totalMinutes = 0;
+
         snapshot.forEach((doc) => {
+            const data = doc.data();
             myEvents.push({ ...doc.data(), id: doc.id });
+
+            // 計算時數邏輯
+            if (data.start && data.end) {
+                const diff = (new Date(data.end) - new Date(data.start)) / (1000 * 60);
+                totalMinutes += diff;
+            }
         });
-        console.log("🔔 學生收到更新，課程數量：", myEvents.length);
-        if (window.updateCalendarUI) window.updateCalendarUI(myEvents);
+        
+        // 1. 更新時數顯示
+        document.getElementById('student-total-hours').innerText = (totalMinutes / 60).toFixed(1);
+
+        // 2. 核心：呼叫原本的行事曆更新函式
+        // 假設你的 cal-gemini.js 裡用來畫格子的函式叫 updateCalendarUI
+        if (window.updateCalendarUI) {
+            console.log("🎨 正在為學生渲染大行事曆...");
+            window.updateCalendarUI(myEvents);
+        }
     });
 }
 
