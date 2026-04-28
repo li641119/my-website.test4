@@ -6,56 +6,68 @@
     <title>大三行事曆+教練管理系統</title>
     <link rel="stylesheet" href="cal-gemini.css">
 </head>
+
 <body>
-
-<div class="main-wrapper">
-    <div class="sidebar">
-        <div style="text-align: center; font-size:large ;font-weight: 700; margin-bottom: 10px;">📊學生每月上課統計</div>
-        <div id="monthly-stats">
-            <p>尚未有上課紀錄</p>
-        </div>
-        <hr>
-        
-        <div id="stats-summary" class="stats-footer">
-            <p>📅 本週總教球：<span id="week-total">0</span> 小時</p>
-            <p>🗓️ 當月總教球：<span id="month-total">0</span> 小時</p>
-            <p>💵 本月預估收入: <span id="month-income">0</span> 元</p>
-        </div>
-        <button onclick="clearWorkData()" class="clear-btn secondary">清空當月學生課程紀錄</button>
+<div id="login-container">
+    <div class="auth-box">
+        <h1>桌球教學管理系統</h1>
+        <p>登入以查看課程與時數統計</p>
+        <form id="login-form">
+            <input type="email" id="email" placeholder="電子郵件" required>
+            <input type="password" id="password" placeholder="密碼" required>
+            <button type="submit" class="login-btn">登入</button>
+        </form>
+        <div id="login-error" style="color: red; margin-top: 10px; font-size: 14px;"></div>
     </div>
+</div>
+
+<div id="coach-view" style="display: none;">
+    <div class="main-wrapper" id="main-app" style="display: none;">
+        <div class="sidebar">
+            <div style="text-align: center; font-size:large ;font-weight: 700; margin-bottom: 10px;">📊學生每月上課統計</div>
+            <div id="monthly-stats"><p>尚未有上課紀錄</p></div>
+            <hr>
+            <div id="stats-summary" class="stats-footer">
+                <p>📅 當週總時數：<span id="week-total">0</span> 小時</p>
+                <p>🗓️ 當月總時數：<span id="month-total">0</span> 小時</p>
+                <p>💵 當月預估收入: <span id="month-income">0</span> 元</p>
+            </div>
+            <button onclick="clearWorkData()" class="clear-btn secondary">清空當月學生課程紀錄</button>
+        </div>
     
-    <div class="calendar-container">
-        <div class="calendar-header" style="display: flex; justify-content: center; align-items: center; gap: 20px; margin-bottom: 10px;">
-            <h3 id="current-month-range" style="text-align: center; margin: 5px; font-weight: 700;">
-                📅 讀取中...
-            </h3>
-        </div>
-
-        <div class="floating-controls">
-            <button onclick="changeWeek(-1)" title="上一週">⬅️</button>
-            <button onclick="goToday()" class="today-btn">本週</button>
-            <button onclick="changeWeek(1)" title="下一週">➡️</button>
-        </div>
-        <div class="schedule-grid" id="dropzone">
-            <div class="corner"></div>
-            <div class="day-header" data-day="1"><span class="date-label"></span>(一)</div>
-            <div class="day-header" data-day="2"><span class="date-label"></span>(二)</div>
-            <div class="day-header" data-day="3"><span class="date-label"></span>(三)</div>
-            <div class="day-header" data-day="4"><span class="date-label"></span>(四)</div>
-            <div class="day-header" data-day="5"><span class="date-label"></span>(五)</div>
-            <div class="day-header" data-day="6"><span class="date-label"></span>(六)</div>
-            <div class="day-header" data-day="0"><span class="date-label"></span>(日)</div>
-
-
+        <div class="calendar-container">
+            <div class="calendar-header" style="display: flex; justify-content: center; align-items: center; gap: 20px; margin-bottom: 10px;">
+                <h3 id="current-month-range" style="text-align: center; margin: 5px; font-weight: 700;">📅 讀取中...</h3>
+            </div>
+            <div class="floating-controls">
+                <button onclick="changeWeek(-1)" title="上一週">⬅️</button>
+                <button onclick="goToday()" class="today-btn">本週</button>
+                <button onclick="changeWeek(1)" title="下一週">➡️</button>
+            </div>
+            <div class="schedule-grid" id="dropzone">
+                <div class="corner"></div>
+                <div class="day-header" data-day="1"><span class="date-label"></span>(一)</div>
+                <div class="day-header" data-day="2"><span class="date-label"></span>(二)</div>
+                <div class="day-header" data-day="3"><span class="date-label"></span>(三)</div>
+                <div class="day-header" data-day="4"><span class="date-label"></span>(四)</div>
+                <div class="day-header" data-day="5"><span class="date-label"></span>(五)</div>
+                <div class="day-header" data-day="6"><span class="date-label"></span>(六)</div>
+                <div class="day-header" data-day="0"><span class="date-label"></span>(日)</div>
              <div class="time-column">
                 <div>08:00</div><div>09:00</div><div>10:00</div><div>11:00</div>
                 <div>12:00</div><div>13:00</div><div>14:00</div><div>15:00</div>
                 <div>16:00</div><div>17:00</div><div>18:00</div><div>19:00</div>
                 <div>20:00</div><div>21:00</div><div>22:00</div>
+                </div>
+                <div class="grid-lines"></div>
             </div>
-            <div class="grid-lines"></div>
         </div>
     </div>
+</div>
+
+<div id="student-view" style="display: none; padding: 50px; text-align: center;">
+    <h1>歡迎使用學生系統</h1>
+    <p>個人課程統計功能開發中，敬請期待！</p>
 </div>
 
 <div id="eventModal" class="modal">
@@ -114,6 +126,7 @@
     </div>
 </div>
 
-<script src="cal-gemini.js"></script>
+<script type="module" src="app.js"></script>
+<script type="module" src="cal-gemini.js"></script>
 </body>
 </html>

@@ -8,6 +8,21 @@ const presetColors = [
     '#ffc0c7', '#f5c5ff', '#b2ceff', '#c4cbff'
 ];
 
+// 在 cal-gemini.js 中
+window.updateCalendarUI = function(cloudEvents) {
+    // 1. 關鍵：將雲端抓到的 Array 直接賦值給你的全域變數 courses
+    courses = cloudEvents; 
+    const testHeader = document.querySelector('.day-header');
+    if (!testHeader || !testHeader.dataset.fullDate) {
+        console.log("📅 日期尚未就緒，延遲渲染...");
+        updateWeekDates(); // 強制刷一次日期
+    }
+    // 2. 關鍵：執行渲染
+    renderAll(); 
+    
+    console.log("☁️ 雲端同步成功，共有資料：", courses.length);
+};
+
 // --- 1. 初始化 ---
 document.addEventListener('DOMContentLoaded', () => {
     updateWeekDates();
@@ -129,43 +144,41 @@ function saveFromModal() {
     const eventColor = document.getElementById('m-color').value;
 
     if (!name || !start || !end) return alert("請填寫完整資訊");
-
+        
     const startRow = timeToRow(start);
     const endRow = timeToRow(end);
-    const duration = (endRow - startRow) * 10;
-    if (duration <= 0) return alert("結束時間必須晚於開始時間");
+    const duration = (endRow - startRow) * 10; // ✨ 補上這行，否則會報錯
 
-    // 重疊檢查 (Conflict Check)
+    if (isNaN(startRow) || isNaN(endRow)) return;
+
+    // 檢查衝突
     const hasConflict = courses.find(c => {
-        if (c.id === editingId) return false; 
+        if (c.id.toString() === (editingId ? editingId.toString() : "")) return false; 
         return c.day === day && (startRow < c.endRow && endRow > c.startRow);
     });
-    if (hasConflict) {
-        if (!confirm(`⚠️ 時段與 [${hasConflict.name}] 衝突，確定要排入嗎？`)) return;
-    }
+    if (hasConflict && !confirm(`⚠️ 時段與 [${hasConflict.name}] 衝突，確定要排入嗎？`)) return;
 
+    // 計算日期
     const dayHeaders = document.querySelectorAll('.day-header');
     const targetHeader = Array.from(dayHeaders).find(h => h.dataset.day === (day === "8" ? "0" : (parseInt(day)-1).toString()) );
     const dateStr = targetHeader ? targetHeader.dataset.fullDate : new Date().toLocaleDateString('en-CA');
 
-    if (editingId) {
-        // 【編輯模式】
-        const idx = courses.findIndex(c => c.id === editingId);
-        courses[idx] = { 
-            ...courses[idx], 
-            name, loc, day, type, startRow, endRow, start, end, duration, 
-            date: dateStr, isRepeating, color: eventColor 
-        };
-    } else {
-        // 【新增模式】
-        const newCourse = { 
-            id: Date.now(), name, loc, day, type, startRow, endRow, start, end, 
-            duration, date: dateStr, isRepeating, color: eventColor, exceptions: [] 
-        };
-        courses.push(newCourse);
-    }
+    const eventId = editingId ? editingId.toString() : Date.now().toString(); 
     
-    renderAndSave();
+    const courseData = { 
+        id: eventId, 
+        name, loc, day, type, 
+        startRow, endRow, 
+        start, end, 
+        duration, 
+        date: dateStr, 
+        isRepeating, 
+        color: eventColor, 
+        exceptions: editingId ? (courses.find(c => c.id.toString() === editingId.toString())?.exceptions || []) : []
+    };
+
+    console.log("📤 準備上傳:", courseData);
+    window.uploadEvent(courseData); // 呼叫 app.js 的功能
     closeModal();
 }
 
@@ -185,22 +198,34 @@ function renderAll() {
     let weekTotalMinutes = 0;
 
     courses.forEach(course => {
-        const isException = (dStr) => course.exceptions && course.exceptions.includes(dStr);
-        if (course.isRepeating) {
-            dayHeaders.forEach(header => {
-                const dStr = header.dataset.fullDate;
-                const hDay = header.dataset.day; 
-                let isMatch = (course.day === "8" && hDay === "0") || (parseInt(course.day)-1).toString() === hDay;
-                if (isMatch && !isException(dStr)) {
-                    drawEvent(course, container, dStr, parseInt(course.day));
-                    if (course.type === 'work') weekTotalMinutes += Number(course.duration);
-                }
-            });
-        } else if (weekDates.includes(course.date)) {
-            drawEvent(course, container, course.date, parseInt(course.day));
+    const isException = (dStr) => course.exceptions && course.exceptions.includes(dStr);
+
+    if (course.isRepeating) {
+        dayHeaders.forEach(header => {
+            const dStr = header.dataset.fullDate;
+            const hDay = header.dataset.day; // 週一="1", 週二="2" ... 週日="0"
+
+            // 修正比對邏輯：
+            // 假設資料庫存 週一="2", 週二="3" ... 週日="8"
+            // 我們把 course.day 轉成跟 hDay 一致的格式
+            let normalizedCourseDay = (course.day === "8" ? "0" : (parseInt(course.day) - 1).toString());
+            
+            let isMatch = normalizedCourseDay === hDay;
+
+            if (isMatch && !isException(dStr)) {
+                drawEvent(course, container, dStr, parseInt(hDay));
+                if (course.type === 'work') weekTotalMinutes += Number(course.duration);
+            }
+        });
+    } else if (weekDates.includes(course.date)) {
+        // 單次行程：找到該日期對應的 header
+        const targetHeader = Array.from(dayHeaders).find(h => h.dataset.fullDate === course.date);
+        if (targetHeader) {
+            drawEvent(course, container, course.date, parseInt(targetHeader.dataset.day));
             if (course.type === 'work') weekTotalMinutes += Number(course.duration);
         }
-    });
+    } // 這裡補上了原本缺少的閉合括號
+});
 
     // 計算全月數據與學生排名
     const monthData = calculateMonthlyData(currentYear, currentMonth);
@@ -274,64 +299,68 @@ function drawEvent(course, container, dStr, col) {
     const div = document.createElement('div');
     div.className = 'placed-event';
     div.style.backgroundColor = course.color || '#828181';
-    div.style.gridColumn = col;
+
+    // 🔥 重要修正：Grid Column 必須是從 1 開始的整數
+    // 如果傳進來的 col 是 0(日), 1(一)...，對應到 Grid 的第 2 欄到第 8 欄 (第 1 欄是時間軸)
+    // 邏輯：(星期日是 0 則改為 7，其餘維持原樣) + 1 位移
+    let gridCol = (col === 0 ? 7 : col) + 1; 
+    div.style.gridColumn = gridCol;
     div.style.gridRow = `${course.startRow} / ${course.endRow}`;
     
     const isShort = course.duration <= 90; 
     const repeatTag = course.isRepeating ? "🔄" : "";
 
-    if (isShort) {
-        // 短時間：簡約顯示，把地點跟時間併排或精簡
-        div.innerHTML = `
-            <div style="display: flex; flex-direction: column; justify-content: center; height: 100%;">
-                <strong style="font-size: 10px; font-weight: 700">${course.name}${repeatTag}</strong>
-                <span style="font-size: 10px; scale: 0.9; transform-origin: left;">${course.start} | ${course.loc}</span>
-            </div>
-        `;
-    } else {
-        // 標準時間：正常顯示
-        div.innerHTML = `
-            <strong>${course.name} ${repeatTag}</strong>
-            <span>📍 ${course.loc}</span>
-            <span>⏰ ${course.start}-${course.end}</span>
-        `;
-    }
+    div.innerHTML = isShort ? `
+        <div style="display: flex; flex-direction: column; justify-content: center; height: 100%;">
+            <strong style="font-size: 10px; font-weight: 700">${course.name}${repeatTag}</strong>
+            <span style="font-size: 10px; scale: 0.9; transform-origin: left;">${course.start} | ${course.loc}</span>
+        </div>
+    ` : `
+        <strong>${course.name} ${repeatTag}</strong>
+        <span>📍 ${course.loc}</span>
+        <span>⏰ ${course.start}-${course.end}</span>
+    `;
 
-    // ... 其餘 onclick 與 oncontextmenu 邏輯保持不變 ...
-    div.onclick = (e) => { e.stopPropagation(); openModal(true, course); };
-    // ...
+    // 點擊編輯
+    div.onclick = (e) => { 
+        e.stopPropagation(); 
+        openModal(true, course); 
+    };
+
+    // 右鍵刪除邏輯
     div.oncontextmenu = (e) => {
-        e.preventDefault(); // 阻止瀏覽器原生的右鍵選單
+        e.preventDefault();
         e.stopPropagation();
 
-        // 特別注意：這裡要確認變數名稱是 course 還是 c (建議統一用 course)
+        const idStr = course.id.toString();
+
         if (!course.isRepeating) {
-            if (confirm(`確定要刪除 [${course.name}] 的這筆行程嗎？`)) {
-                courses = courses.filter(x => x.id !== course.id);
-                renderAndSave();
+            if (confirm(`確定要刪除 [${course.name}] 嗎？`)) {
+                window.removeEventFromCloud(idStr);
             }
         } else {
-            const action = prompt(
-                `這是重複行程 [${course.name}]\n\n` +
-                `請輸入數字選擇操作：\n` +
-                `1. 僅刪除「本週」(${dStr})\n` +
-                `2. 永久刪除`, 
-                "1"
-            );
-
-            if (action === "1") {
-                if (!course.exceptions) course.exceptions = [];
-                course.exceptions.push(dStr);
-                renderAndSave();
-            } else if (action === "2") {
-                if (confirm(`確定要永久刪除 [${course.name}] 的所有重複行程嗎？`)) {
-                    courses = courses.filter(x => x.id !== course.id);
-                    renderAndSave();
-                }
+            const action = prompt("1. 僅刪除本週\n2. 永久刪除", "1");
+        if (action === "1") {
+            if (!course.exceptions) course.exceptions = [];
+            course.exceptions.push(dStr);
+            // 重複行程的「單週刪除」其實是「更新例外清單」
+            window.uploadEvent(course); 
+        } else if (action === "2") {
+            if (confirm(`確定要永久刪除重複行程 [${course.name}] 嗎？`)) {
+                window.removeEventFromCloud(idStr);
             }
         }
-    };
+    }
+};
+
     container.appendChild(div);
+}
+
+function clearWorkData() {
+    if (confirm("確定要清空雲端所有行程嗎？")) {
+        // 遍歷所有行程進行雲端刪除
+        courses.forEach(c => window.removeEventFromCloud(c.id));
+    }
 }
 
 // --- 6. 側邊欄渲染 ---
@@ -340,11 +369,11 @@ function renderSidebar(studentStats) {
     if (!statsDiv) return;
     statsDiv.innerHTML = "";
     
-const entries = Object.entries(studentStats).sort((a, b) => b[1].mins - a[1].mins);    
-if (entries.length === 0) { 
-        statsDiv.innerHTML = "<p style='color:#888; text-align:center; margin-top:20px;'>本月尚無教球紀錄</p>"; 
-        return; 
-    }
+    const entries = Object.entries(studentStats).sort((a, b) => b[1].mins - a[1].mins);    
+    if (entries.length === 0) { 
+            statsDiv.innerHTML = "<p style='color:#888; text-align:center; margin-top:20px;'>本月尚無教球紀錄</p>"; 
+            return; 
+        }
 
     entries.forEach(([name, data]) => {
         const student = courses.find(c => c.name === name);
@@ -383,8 +412,11 @@ if (entries.length === 0) {
 }
 
 function updateStudentColor(name, newColor) {
-    courses = courses.map(c => c.name === name ? { ...c, color: newColor } : c);
-    renderAndSave();
+    // 這裡原本呼叫 renderAndSave()，請改為更新雲端
+    courses.filter(c => c.name === name).forEach(c => {
+        c.color = newColor;
+        window.uploadEvent(c);
+    });
 }
 
 // --- 7. 日期與儲存 ---
@@ -422,8 +454,17 @@ function toggleCustomLoc() {
 }
 
 function saveToStorage() { localStorage.setItem('coach_data_v3', JSON.stringify(courses)); }
+// 在 cal-gemini.js 裡新增
+
+
 function loadData() {
-    const data = localStorage.getItem('coach_data_v3');
-    if (data) { courses = JSON.parse(data); renderAll(); }
+    console.log("正在連線至雲端資料庫...");
 }
-function renderAndSave() { renderAll(); saveToStorage(); }
+function renderAndSave() { renderAll();}
+window.saveFromModal = saveFromModal;
+window.closeModal = closeModal;
+window.changeWeek = changeWeek;
+window.goToday = goToday;
+window.toggleCustomLoc = toggleCustomLoc;
+window.clearWorkData = clearWorkData;
+window.updateStudentColor = updateStudentColor

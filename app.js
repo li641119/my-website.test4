@@ -57,13 +57,11 @@ document.getElementById('login-form').addEventListener('submit', (e) => {
 });
 
 function startLiveSync(uid) {
-    console.log("🔍 目前連線的 Firebase 專案 ID:", db._databaseId.projectId);
     console.log("🔒 啟動個人資料同步...");
     if (unsubscribe) unsubscribe(); // 避免重複監聽
 
-    const q = query(
-        collection(db, "events"));
-
+    const q = query(collection(db, "events"));
+    
     // 使用 onSnapshot 確保資料變動時 UI 會自動更新
     unsubscribe = onSnapshot(q, (snapshot) => {
         const myEvents = [];

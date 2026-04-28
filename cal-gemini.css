@@ -285,3 +285,145 @@ input[type="color"]::-moz-color-swatch {
     transform: scale(1.1);
     box-shadow: 0 0 5px rgba(0,0,0,0.3);
 }
+
+/* 登入介面專用樣式 */
+#login-container {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: #f0f2f5; /* 輕盈的背景色 */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999; /* 確保在最上層 */
+}
+
+.auth-box {
+    background: white;
+    padding: 10px;
+    border-radius: 15px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    width: 100%;
+    max-width: 400px;
+    text-align: center;
+}
+
+.auth-box input {
+    width: 90%;
+    padding: 12px;
+    margin: 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+}
+
+.login-btn {
+    width: 30%;
+    padding: 8px;
+    background-color: #4A90E2; /* 配合你原本的標記顏色 */
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    align-items: flex-end;
+}
+
+.login-btn:hover {
+    background-color: #357abd;
+}
+
+/* --- 手機端 RWD (螢幕寬度小於 768px) --- */
+@media (max-width: 768px) {
+    /* 1. 佈局調整：由橫排變直排 */
+    .main-wrapper {
+        flex-direction: column;
+        padding: 10px;
+        gap: 10px;
+    }
+
+    /* 2. 側邊欄：在手機上變成可摺疊或置底 */
+    .sidebar {
+        width: auto;
+        order: 2; /* 讓行事曆排在前面，統計排在後面 */
+        padding: 15px;
+    }
+    
+    #monthly-stats {
+        max-height: 200px; /* 限制高度，避免太長 */
+    }
+
+    /* 3. 行事曆容器：允許橫向滾動 */
+    .calendar-container {
+        padding: 8px;
+        order: 1;
+        overflow-x: auto; /* 關鍵：讓一週七天可以橫向滑動 */
+    }
+
+    /* 4. 格線調整：縮小時間欄寬度，確保內容寬度足夠 */
+    .schedule-grid {
+        grid-template-columns: 45px repeat(7, 120px); /* 時間欄縮小，每一天固定寬度 */
+        min-width: 885px; /* (45 + 120*7) 確保寬度不縮減，產生橫滑動條 */
+    }
+
+    .time-column {
+        font-size: 10px;
+    }
+
+    .day-header {
+        font-size: 11px;
+        position: sticky; /* 讓標題在捲動時固定在最上方 */
+        top: 0;
+        z-index: 20;
+    }
+
+    /* 5. 行程方塊調整 */
+    .placed-event {
+        padding: 1px 2px;
+        font-size: 10px;
+    }
+    
+    .placed-event strong {
+        font-size: 11px;
+    }
+
+    /* 6. 懸浮按鈕：縮小一點避免擋住內容 */
+    .floating-controls {
+        bottom: 20px;
+        right: 20px;
+        gap: 5px;
+    }
+
+    .floating-controls button {
+        padding: 10px 14px;
+        font-size: 14px;
+    }
+
+    /* 7. 彈窗優化：佔滿寬度 */
+    .modal-content {
+        width: 90%;
+        margin: 20% auto;
+        padding: 20px;
+    }
+
+    .time-row {
+        flex-direction: column; /* 時間輸入在手機上改直排 */
+        gap: 0;
+    }
+
+    .modal-content input, .modal-content select {
+        font-size: 16px; /* 防止 iOS 輸入時自動放大 */
+        padding: 12px;
+    }
+}
+
+/* 針對超小螢幕的微調 */
+@media (max-width: 480px) {
+    .calendar-header h3 {
+        font-size: 14px;
+    }
+    
+    .day-header {
+        padding: 2px;
+    }
+}
