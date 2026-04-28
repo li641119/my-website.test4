@@ -1,7 +1,7 @@
 // app.js
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
 import { 
-    getFirestore, collection, query, where, getDocs, onSnapshot, setDoc, doc, deleteDoc 
+    getFirestore, collection, query, where, getDocs, onSnapshot, setDoc, doc, deleteDoc, getDoc
 } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 // 1. 新增：匯入 Firebase Auth 模組
 import { 
@@ -47,8 +47,7 @@ onAuthStateChanged(auth, user => {
             console.log("教練模式已啟動");
             
             startLiveSync();
-            // 呼叫原本 cal-gemini.js 裡的渲染功能
-            // 確保這些函式在全域或已匯出
+            
             if (window.renderCurrentWeek) window.renderCurrentWeek();
             if (window.updateStats) window.updateStats();
         } else {
@@ -57,17 +56,47 @@ onAuthStateChanged(auth, user => {
             studentView.style.display = 'block';
             console.log("啟動學生模式");
             // 啟動「只抓自己課程」的同步
-            startStudentLiveSync(user.email);}
-        } else {
-        // 3. 登出狀態
-            console.log("目前為登出狀態");
-            loginContainer.style.display = 'block';
-            mainApp.style.display = 'none';
-            coachView.style.display = 'none';
-            studentView.style.display = 'none';
-            if (unsubscribe) unsubscribe(); // 登出時停止監聽
+            startStudentLiveSync(user.email);
+        }
+    } else {
+    // 3. 登出狀態
+        console.log("目前為登出狀態");
+        loginContainer.style.display = 'block';
+        mainApp.style.display = 'none';
+        coachView.style.display = 'none';
+        studentView.style.display = 'none';
+        if (unsubscribe) unsubscribe(); // 登出時停止監聽
     }
 });
+
+function startLiveSync() {
+    console.log("🔒 啟動全域資料同步 (教練視角)...");
+    if (unsubscribe) unsubscribe(); 
+    const q = query(collection(db, "events"));
+    unsubscribe = onSnapshot(q, (snapshot) => {
+        const myEvents = [];
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            myEvents.push({ ...data, id: data.id || doc.id });
+        });
+        if (window.updateCalendarUI) window.updateCalendarUI(myEvents);
+    });
+}
+
+function startStudentLiveSync(studentEmail) {
+    console.log(`🔒 正在下載 ${studentEmail} 的專屬課程...`);
+    if (unsubscribe) unsubscribe();
+    const q = query(collection(db, "events"), where("studentEmail", "==", studentEmail));
+    unsubscribe = onSnapshot(q, (snapshot) => {
+        const myEvents = [];
+        snapshot.forEach((doc) => {
+            myEvents.push({ ...doc.data(), id: doc.id });
+        });
+        console.log("🔔 學生收到更新，課程數量：", myEvents.length);
+        if (window.updateCalendarUI) window.updateCalendarUI(myEvents);
+    });
+}
+
 
 // 監聽登入表單
 document.getElementById('login-form').addEventListener('submit', (e) => {
@@ -89,29 +118,6 @@ document.getElementById('login-form').addEventListener('submit', (e) => {
             }
         });
 });
-
-function startStudentLiveSync(studentEmail) {
-    console.log(`🔒 正在下載 ${studentEmail} 的專屬課程...`);
-    if (unsubscribe) unsubscribe();
-
-    // 關鍵：只抓取 studentEmail 等於當前登入者 Email 的資料
-    const q = query(
-        collection(db, "events"), 
-        where("studentEmail", "==", studentEmail)
-    );
-
-    unsubscribe = onSnapshot(q, (snapshot) => {
-        const myEvents = [];
-        snapshot.forEach((doc) => {
-            myEvents.push({ ...doc.data(), id: doc.id });
-        });
-        
-        console.log("🔔 學生收到更新，課程數量：", myEvents.length);
-        if (window.updateCalendarUI) {
-            window.updateCalendarUI(myEvents);
-        }
-    });
-}
 
 window.uploadEvent = async (eventData) => {
     try {
