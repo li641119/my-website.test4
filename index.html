@@ -65,13 +65,17 @@
     </div>
 </div>
 
-<div id="student-view" style="display: none; padding: 50px; text-align: center;">
-    <div class="student-header" style="padding: 20px; background: #f8f9fa; border-bottom: 1px solid #ddd;">
-        <h2 id="student-welcome-msg">您好，同學！</h2>
-        <div style="display: flex; gap: 15px; margin-top: 10px;">
-            <div style="background: white; padding: 10px 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                <span style="color: #666;">本月總時數：</span>
-                <span id="student-total-hours" style="font-weight: bold; color: #1976d2;">0</span> 小時
+<div id="student-view" style="display: none;">
+    <div class="student-header">
+        <h2>👋 您好，<span id="student-name-display">同學</span></h2>
+        <div class="student-stats-row">
+            <div class="student-stat-card">
+                <span>本月上課時數</span>
+                <span class="stat-value" id="student-total-hours">0.0</span>
+            </div>
+            <div class="student-stat-card">
+                <span>剩餘課程堂數</span>
+                <span class="stat-value" id="student-class-count">0</span>
             </div>
         </div>
     </div>
