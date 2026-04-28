@@ -7,8 +7,18 @@
     --school-border: #9c27b0;
 }
 
-body { font-family: "Microsoft JhengHei", sans-serif; background: #f8f9fa; margin: 0; color: #333; }
-.main-wrapper { display: flex; padding: 20px; gap: 20px; min-height: 100vh; }
+body { 
+    font-family: "Microsoft JhengHei", sans-serif; 
+    background: #f8f9fa;
+    margin: 0; 
+    color: #333; 
+}
+
+.main-wrapper { 
+    display: flex; 
+    padding: 20px; 
+    gap: 20px; 
+    min-height: 100vh; }
 
 /* 側邊欄 */
 .sidebar { 
@@ -21,17 +31,9 @@ body { font-family: "Microsoft JhengHei", sans-serif; background: #f8f9fa; margi
     flex-direction: column;
 }
 /* 讓顏色選擇器的內容物也變圓形 */
-input[type="color"]::-webkit-color-swatch-wrapper {
-    padding: 0;
-}
-input[type="color"]::-webkit-color-swatch {
-    border: none;
-    border-radius: 50%;
-}
-input[type="color"]::-moz-color-swatch {
-    border: none;
-    border-radius: 50%;
-}
+input[type="color"]::-webkit-color-swatch-wrapper {padding: 0;}
+input[type="color"]::-webkit-color-swatch {border: none;border-radius: 50%;}
+input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 
 .stat-item { background: #f8f9fa; padding: 5px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
 .clear-btn { width: 100%; padding: 10px; background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; cursor: pointer; border-radius: 6px; margin-top: 10px; font-weight: bold; }
@@ -67,6 +69,38 @@ input[type="color"]::-moz-color-swatch {
     font-size: 14px;
 }
 
+/* --- 學生視角專屬樣式 --- */
+#student-view {
+    flex-grow: 1;
+    width: 100%;
+}
+
+.student-header {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.student-stats-row {
+    display: flex;
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.student-stat-card {
+    background: #e3f2fd;
+    border: 1px solid #bbdefb;
+    padding: 15px 20px;
+    border-radius: 10px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.student-stat-card .label { font-size: 13px; color: #546e7a; margin-bottom: 5px; }
+.student-stat-card .stat-value { font-size: 24px; font-weight: bold; color: #1565c0; }
 /* 行事曆核心 */
 .calendar-container { 
     flex-grow: 1; 
@@ -158,6 +192,7 @@ input[type="color"]::-moz-color-swatch {
     opacity: 0.9;
     white-space: nowrap;
 }
+
 
 /* 關鍵：高度過小時，強制讓資訊變橫向或縮小 */
 /* 假設 1 小時對應的高度大約是 50-60px 左右 */
@@ -349,6 +384,8 @@ input[type="color"]::-moz-color-swatch {
         padding: 15px;
     }
     
+    .student-stats-row { flex-direction: column; }
+
     #monthly-stats {
         max-height: 200px; /* 限制高度，避免太長 */
     }
@@ -367,6 +404,10 @@ input[type="color"]::-moz-color-swatch {
     }
 
     .time-column {
+        position: sticky;
+        left: 0;
+        z-index: 25;
+        background: #fcfcfc;
         font-size: 10px;
     }
 
