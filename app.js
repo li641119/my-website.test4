@@ -77,7 +77,7 @@ function startLiveSync() {
         const myEvents = [];
         snapshot.forEach((doc) => {
             const data = doc.data();
-            myEvents.push({ ...data, id: data.id || doc.id });
+            myEvents.push({ ...data, id: data.id ? data.id.toString() : doc.id });
         });
         if (window.updateCalendarUI) window.updateCalendarUI(myEvents);
     });
@@ -97,7 +97,7 @@ function startStudentLiveSync(studentEmail) {
 
         snapshot.forEach((doc) => {
             const data = doc.data();
-            myEvents.push({ ...doc.data(), id: doc.id });
+            myEvents.push({ ...data, id: data.id ? data.id.toString() : doc.id });
 
             // 計算時數邏輯
             if (data.start && data.end) {
@@ -143,7 +143,7 @@ document.getElementById('login-form').addEventListener('submit', (e) => {
 window.uploadEvent = async (eventData) => {
     try {
         // 1. 根據學生姓名去 students 表查找 Email
-        const studentRef = doc(db, "students", eventData.title); // 假設文件 ID 就是姓名
+        const studentRef = doc(db, "students", eventData.name); // 假設文件 ID 就是姓名
         const studentSnap = await getDoc(studentRef);
         
         if (studentSnap.exists()) {
