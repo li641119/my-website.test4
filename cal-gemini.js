@@ -177,8 +177,24 @@ function saveFromModal() {
         exceptions: editingId ? (courses.find(c => c.id.toString() === editingId.toString())?.exceptions || []) : []
     };
 
+
     console.log("📤 準備上傳:", courseData);
+
     window.uploadEvent(courseData); // 呼叫 app.js 的功能
+
+    if (editingId) {
+        const index = courses.findIndex(c => c.id.toString() === editingId.toString());
+        if (index > -1) courses[index] = courseData;
+    } else {
+        courses.push(courseData);
+    }
+
+    // 3. 立即重畫畫面
+    renderAll(); 
+    
+    // 4. (選配) 如果你有存本地備份，也更新它
+    saveToStorage(); 
+
     closeModal();
 }
 
@@ -189,6 +205,7 @@ function renderAll() {
     
     const dayHeaders = document.querySelectorAll('.day-header');
     const weekDates = Array.from(dayHeaders).map(h => h.dataset.fullDate);
+    const duration = Number((endRow - startRow) * 10) || 0;
     
     // 取得畫面上主要月份
     const middleDate = new Date(dayHeaders[3].dataset.fullDate);
@@ -198,6 +215,7 @@ function renderAll() {
     let weekTotalMinutes = 0;
 
     courses.forEach(course => {
+    if (!course) return;
     const isException = (dStr) => course.exceptions && course.exceptions.includes(dStr);
 
     if (course.isRepeating) {
@@ -214,7 +232,7 @@ function renderAll() {
 
             if (isMatch && !isException(dStr)) {
                 drawEvent(course, container, dStr, parseInt(hDay));
-                if (course.type === 'work') weekTotalMinutes += Number(course.duration);
+                if (course.type === 'work') weekTotalMinutes += Number(course.duration ||0);
             }
         });
     } else if (weekDates.includes(course.date)) {
@@ -222,7 +240,7 @@ function renderAll() {
         const targetHeader = Array.from(dayHeaders).find(h => h.dataset.fullDate === course.date);
         if (targetHeader) {
             drawEvent(course, container, course.date, parseInt(targetHeader.dataset.day));
-            if (course.type === 'work') weekTotalMinutes += Number(course.duration);
+            if (course.type === 'work') weekTotalMinutes += Number(course.duration || 0);
         }
     } // 這裡補上了原本缺少的閉合括號
 });
@@ -294,15 +312,12 @@ function calculateMonthlyData(targetYear, targetMonth) {
     return { totalMinutes, totalIncome, studentStats };
 }
 
-// --- 5. 繪製行程方塊 (整合編輯點擊) ---
+// --- 5. 繪製行程方塊 (修正刪除邏輯部分) ---
 function drawEvent(course, container, dStr, col) {
     const div = document.createElement('div');
     div.className = 'placed-event';
     div.style.backgroundColor = course.color || '#828181';
 
-    // 🔥 重要修正：Grid Column 必須是從 1 開始的整數
-    // 如果傳進來的 col 是 0(日), 1(一)...，對應到 Grid 的第 2 欄到第 8 欄 (第 1 欄是時間軸)
-    // 邏輯：(星期日是 0 則改為 7，其餘維持原樣) + 1 位移
     let gridCol = (col === 0 ? 7 : col) + 1; 
     div.style.gridColumn = gridCol;
     div.style.gridRow = `${course.startRow} / ${course.endRow}`;
@@ -337,24 +352,40 @@ function drawEvent(course, container, dStr, col) {
         if (!course.isRepeating) {
             if (confirm(`確定要刪除 [${course.name}] 嗎？`)) {
                 window.removeEventFromCloud(idStr);
+                courses = courses.filter(c => c.id.toString() !== idStr);
+                renderAll();
             }
         } else {
-            const action = prompt("1. 僅刪除本週\n2. 永久刪除", "1");
-        if (action === "1") {
-            if (!course.exceptions) course.exceptions = [];
-            course.exceptions.push(dStr);
-            // 重複行程的「單週刪除」其實是「更新例外清單」
-            window.uploadEvent(course); 
-        } else if (action === "2") {
-            if (confirm(`確定要永久刪除重複行程 [${course.name}] 嗎？`)) {
-                window.removeEventFromCloud(idStr);
+            // 重複行程：選擇刪除方式
+            const action = prompt("請選擇刪除方式：\n1. 僅刪除本週 (${dStr})\n2. 永久刪除整個循環", "1");
+            
+            if (action === "1") {
+                // 確保 exceptions 陣列存在
+                if (!course.exceptions) course.exceptions = [];
+                if (!course.exceptions.includes(dStr)) {
+                    course.exceptions.push(dStr);
+
+                    const idx = courses.findIndex(c => c.id.toString() === idStr);
+                    if (idx !== -1) courses[idx] = course;
+
+                    window.uploadEvent(course); // 同步回雲端
+                    renderAll(); // 立即重新渲染，讓行程消失
+                } else {
+                    alert("該日期已在刪除清單中");
+                }
+            } else if (action === "2") {
+                if (confirm(`⚠️ 警告：這將刪除所有週次的 [${course.name}]，確定嗎？`)) {
+                    window.removeEventFromCloud(idStr);
+                    courses = courses.filter(c => c.id.toString() !== idStr); // 補上這行
+                    renderAll(); // 補上這行
+                }
             }
         }
-    }
-};
+    };
 
     container.appendChild(div);
 }
+                
 
 function clearWorkData() {
     if (confirm("確定要清空雲端所有行程嗎？")) {
