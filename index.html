@@ -3,145 +3,239 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>大三行事曆+教練管理系統</title>
+    <title>大四行事曆+教練管理系統</title>
     <link rel="stylesheet" href="cal-gemini.css">
+    <link rel="icon" href="data:,">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 
 <body>
-<div id="login-container">
-    <div class="auth-box">
-        <h1>桌球教學管理系統</h1>
-        <p>登入以查看課程與時數統計</p>
-        <form id="login-form">
-            <input type="email" id="email" placeholder="電子郵件" required>
-            <input type="password" id="password" placeholder="密碼" required>
-            <button type="submit" class="login-btn">登入</button>
-        </form>
-        <div id="login-error" style="color: red; margin-top: 10px; font-size: 14px;"></div>
-    </div>
-</div>
+<!--所有人都需要通過這關門禁大廳-->
+    <div id="login-container">
+        <div class="auth-box">
+            <h1>桌球教學管理系統</h1>
+            <p class="login-subtitle">登入以查看課程與時數統計</p>
+            
+            <div class="auth-tabs">
+                <button type="button" class="auth-tab active" id="tab-login">登入</button>
+                <button type="button" class="auth-tab" id="tab-register">註冊</button>
+            </div>
 
-<div id="coach-view" style="display: none;">
-    <div class="main-wrapper" id="main-app" style="display: none;">
-        <div class="sidebar">
-            <div style="text-align: center; font-size:large ;font-weight: 700; margin-bottom: 10px;">📊學生每月上課統計</div>
-            <div id="monthly-stats"><p>尚未有上課紀錄</p></div>
-            <hr>
-            <div id="stats-summary" class="stats-footer">
-                <p>📅 當週總時數：<span id="week-total">0</span> 小時</p>
-                <p>🗓️ 當月總時數：<span id="month-total">0</span> 小時</p>
-                <p>💵 當月預估收入: <span id="month-income">0</span> 元</p>
-            </div>
-            <button onclick="clearWorkData()" class="clear-btn secondary">清空當月學生課程紀錄</button>
-        </div>
-    
-        <div class="calendar-container">
-            <div class="calendar-header" style="display: flex; justify-content: center; align-items: center; gap: 20px; margin-bottom: 10px;">
-                <h3 id="current-month-range" style="text-align: center; margin: 5px; font-weight: 700;">📅 讀取中...</h3>
-            </div>
-            <div class="floating-controls">
-                <button onclick="changeWeek(-1)" title="上一週">⬅️</button>
-                <button onclick="goToday()" class="today-btn">本週</button>
-                <button onclick="changeWeek(1)" title="下一週">➡️</button>
-            </div>
-            <div class="schedule-grid" id="dropzone">
-                <div class="corner"></div>
-                <div class="day-header" data-day="1"><span class="date-label"></span>(一)</div>
-                <div class="day-header" data-day="2"><span class="date-label"></span>(二)</div>
-                <div class="day-header" data-day="3"><span class="date-label"></span>(三)</div>
-                <div class="day-header" data-day="4"><span class="date-label"></span>(四)</div>
-                <div class="day-header" data-day="5"><span class="date-label"></span>(五)</div>
-                <div class="day-header" data-day="6"><span class="date-label"></span>(六)</div>
-                <div class="day-header" data-day="0"><span class="date-label"></span>(日)</div>
-             <div class="time-column">
-                <div>08:00</div><div>09:00</div><div>10:00</div><div>11:00</div>
-                <div>12:00</div><div>13:00</div><div>14:00</div><div>15:00</div>
-                <div>16:00</div><div>17:00</div><div>18:00</div><div>19:00</div>
-                <div>20:00</div><div>21:00</div><div>22:00</div>
+            <form id="login-form">
+                <span class="field-label">電子郵件</span>
+                <input type="email" id="email" placeholder="you@example.com" required>
+                 <span class="field-label">密碼</span>
+                <div class="password-field">
+                    <input type="password" id="password" placeholder="輸入密碼" required>
+                    <button type="button" class="toggle-pw" data-target="password">顯示</button>
                 </div>
-                <div class="grid-lines"></div>
-            </div>
+                <button type="submit" class="login-btn">登入</button>
+            </form>
+            <div id="login-error"></div>
+
+             <form id="register-form" class="auth-form-hidden">
+                <span class="field-label">姓名</span>
+                <input type="text" id="register-name" placeholder="你的姓名" required>
+ 
+                <span class="field-label">電子郵件</span>
+                <input type="email" id="register-email" placeholder="you@example.com" required>
+ 
+                <span class="field-label">密碼</span>
+                <div class="password-field">
+                    <input type="password" id="register-password" placeholder="至少 6 個字元" required>
+                    <button type="button" class="toggle-pw" data-target="register-password">顯示</button>
+                </div>
+ 
+                <span class="field-label">確認密碼</span>
+                <div class="password-field">
+                    <input type="password" id="register-confirm" placeholder="再次輸入密碼" required>
+                    <button type="button" class="toggle-pw" data-target="register-confirm">顯示</button>
+                </div>
+ 
+                <button type="submit" class="login-btn">建立帳號</button>
+            </form>
+            <div id="register-error"></div>
+            <!-- ▲▲▲ 新增結束 ▲▲▲ -->
+ 
+            <p class="auth-footnote">忘記密碼或帳號問題，請聯絡教練協助處理。</p>
         </div>
     </div>
-</div>
 
-<div id="student-view" style="display: none;">
-    <div class="student-header">
-        <h2>👋 您好，<span id="student-name-display">同學</span></h2>
-        <div class="student-stats-row">
-            <div class="student-stat-card">
-                <span>本月上課時數</span>
-                <span class="stat-value" id="student-total-hours">0.0</span>
+<!--教練專用頁面-->
+    <div id="coach-view" class="hide">
+        <div class="main-wrapper" id="main-app">
+            <div class="sidebar">
+                <div class="sidebar-title">📊學生每月上課統計</div>
+                <div id="monthly-stats">
+                    <p class="no-data-hint">尚未有上課紀錄</p>
+                </div>
+                <hr>
+                <div id="stats-summary" class="stats-footer">
+                    <p>📅 當週時數：<span id="week-total">0</span> 小時</p>
+                    <p>🗓️ 當月時數：<span id="month-total">0</span> 小時</p>
+                    <p>
+                        💵 當月收入: 
+                        <span class="income-wrapper">
+                            <span id="month-income" class="income-amount">0</span> 元
+                            <button type="button" id="toggle-income-btn" class="toggle-income-btn">查看</button>
+                        </span>
+                    </p>
+                </div>
+                <button id="export-ics-btn" class="clear-btn secondary" onclick="exportScheduleToImage()"> 📤 匯出本週行事曆 (.png)</button>
             </div>
-            <div class="student-stat-card">
-                <span>剩餘課程堂數</span>
-                <span class="stat-value" id="student-class-count">0</span>
-            </div>
-        </div>
-    </div>
-
-    <div class="calendar-container">
-        <div id="student-calendar-grid"></div> 
-    </div>
-</div>
-
-<div id="eventModal" class="modal">
-    <div class="modal-content">
-        <label>行程名稱: <input type="text" id="m-name" list="student-list" placeholder="請輸入學生姓名">
-                        <datalist id="student-list"></datalist>
         
-        <label>地點: 
-            <select id="m-loc" onchange="toggleCustomLoc()">
-                <option value="台大新體">台大新體</option>
-                <option value="新店運動中心">新店運動中心</option>
-                <option value="大安運動中心">大安運動中心</option>
-                <option value="天下為公">天下為公</option>
-                <option value="板橋大遠百">板橋大遠百</option>
-                <option value="歐洲公園">歐洲公園</option>
-                <option value="信義">信義</option>
-                <option value="CUSTOM">其他地點</option> 
-            </select><input type="text" id="m-loc-custom" placeholder="請輸入地點名稱" style="display:none; margin-top: 5px;">
-        </label>
-
-        <label>類別: 
-            <select id="m-type">
-                <option value="work">教球</option>
-                <option value="school">上課</option>
-            </select>
-        </label>
-
-        <label>標記顏色</label>
-        <div id="color-palette" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px;">
+            <div class="calendar-container">
+                <div class="calendar-header flex center">
+                    <h3 id="current-month-range" class="calendar-title">📅 讀取中...</h3>
+                </div>
+                <div class="floating-controls">
+                    <button onclick="changeWeek(-1)" title="上一週">⬅️</button>
+                    <button onclick="goToday()" class="today-btn">本週</button>
+                    <button onclick="changeWeek(1)" title="下一週">➡️</button>
+                </div>
+                <div class="schedule-grid" id="dropzone">
+                    <div class="corner"></div>
+                    <div class="day-header" data-day="1"><span class="date-label"></span>(一)</div>
+                    <div class="day-header" data-day="2"><span class="date-label"></span>(二)</div>
+                    <div class="day-header" data-day="3"><span class="date-label"></span>(三)</div>
+                    <div class="day-header" data-day="4"><span class="date-label"></span>(四)</div>
+                    <div class="day-header" data-day="5"><span class="date-label"></span>(五)</div>
+                    <div class="day-header" data-day="6"><span class="date-label"></span>(六)</div>
+                    <div class="day-header" data-day="0"><span class="date-label"></span>(日)</div>
+                <div class="time-column">
+                    <div>08:00</div><div>09:00</div><div>10:00</div><div>11:00</div>
+                    <div>12:00</div><div>13:00</div><div>14:00</div><div>15:00</div>
+                    <div>16:00</div><div>17:00</div><div>18:00</div><div>19:00</div>
+                    <div>20:00</div><div>21:00</div><div>22:00</div>
+                    </div>
+                    <div class="grid-lines"></div>
+                </div>
             </div>
-        <input type="hidden" id="m-color" value="#4A90E2">
-
-        <label>星期: 
-            <select id="m-day">
-                <option value="2">週一</option><option value="3">週二</option>
-                <option value="4">週三</option><option value="5">週四</option>
-                <option value="6">週五</option><option value="7">週六</option>
-                <option value="8">週日</option>
-            </select>
-        </label>
-
-        <div class="time-row">
-            <label>開始: <input type="time" id="m-start" value="09:00"></label>
-            <label>結束: <input type="time" id="m-end" value="10:00"></label>
-        </div>
-
-        <label style="display: flex; align-items: center; gap: 8px; margin: 10px 0; cursor: pointer; background: #f0f7ff; padding: 8px; border-radius: 8px;">
-            <input type="checkbox" id="m-repeat" style="width: 18px; height: 18px;"> 
-            <span style="font-size: 14px; color: #2c3e50; font-weight: bold;">🔄 每週重複 (固定行程)</span>
-        </label>
-
-        <div class="modal-btns">
-            <button onclick="saveFromModal()" class="save-btn">儲存行程</button>
-            <button onclick="closeModal()">取消</button>
         </div>
     </div>
-</div>
+
+    <!--學生專用頁面-->
+    <div id="student-view" style="display: none;">
+        <div class="student-header">
+            <h2>👋 您好，<span id="student-name-display">同學</span></h2>
+            <div class="student-stats-row">
+                <div class="student-stat-card">
+                    <span>本月上課時數</span>
+                    <span class="stat-value" id="student-total-hours">0.0</span>
+                </div>
+                <div class="student-stat-card">
+                    <span>繳費情形</span>
+                    <span class="stat-value" id="student-class-count">未繳費</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="calendar-container">
+            <div id="student-calendar-grid"></div> 
+        </div>
+    </div>
+
+    <!--增加課程的視窗-->
+    <div id="eventModal" class="modal">
+        <div class="modal-content">
+            <label for="m-name">行程名稱:</label>
+            <input type="text" id="m-name" list="student-list" placeholder="請輸入學生姓名">
+            <datalist id="student-list"></datalist>
+            
+            <label for="m-loc">地點:</label>
+            <select id="m-loc" onchange="toggleCustomLoc()">
+                    <option value="台大新體">台大新體</option>
+                    <option value="新店運動中心">新店運動中心</option>
+                    <option value="大安運動中心">大安運動中心</option>
+                    <option value="天下為公">天下為公</option>
+                    <option value="板橋大遠百">板橋大遠百</option>
+                    <option value="歐洲公園">歐洲公園</option>
+                    <option value="信義">信義</option>
+                    <option value="CUSTOM">其他地點</option> 
+            </select>
+            <input type="text" id="m-loc-custom" placeholder="請輸入地點名稱">
+
+            <label for="m-type">類別:</label>
+            <select id="m-type">
+                    <option value="work">教球</option>
+                    <option value="school">上課</option>
+                    <option value="others">其他行程</option>
+                </select>
+            </label>
+
+            <label for="m-day">星期:</label>
+            <select id="m-day">
+                    <option value="2">週一</option><option value="3">週二</option>
+                    <option value="4">週三</option><option value="5">週四</option>
+                    <option value="6">週五</option><option value="7">週六</option>
+                    <option value="8">週日</option>
+            </select>
+
+            <div class="time-row">
+                <label>開始: <input type="time" id="m-start" value="09:00"></label>
+                <label>結束: <input type="time" id="m-end" value="10:00"></label>
+            </div>
+
+            <div class="price-row">
+            <label for="m-price">費用:</label>
+            <div class="price-input-wrapper">
+                <input type="number" id="m-price" placeholder="例如: 1200">
+                <span class="currency-unit">元</span>
+                </div>
+            </div>
+
+            <label class="repeat-checkbox-wrapper">
+                <input type="checkbox" id="m-repeat"> 
+                <span class="repeat-text">🔄 每週重複 (固定行程)</span>
+            </label>
+
+            <div class="modal-buttons">
+                <button type= "button" class="btn-save" onclick="saveFromModal()" class="save-btn">儲存行程</button>
+                <button type= "button" class="btn-cancel" onclick="closeModal()">取消</button>
+            </div>
+        </div>
+    </div>
 
 <script type="module" src="app.js"></script>
 <script type="module" src="cal-gemini.js"></script>
+
+<script>
+  (function () {
+    const tabLogin = document.getElementById('tab-login');
+    const tabRegister = document.getElementById('tab-register');
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
+ 
+    function showLogin() {
+      tabLogin.classList.add('active');
+      tabRegister.classList.remove('active');
+      loginForm.classList.remove('auth-form-hidden');
+      registerForm.classList.add('auth-form-hidden');
+    }
+ 
+    function showRegister() {
+      tabRegister.classList.add('active');
+      tabLogin.classList.remove('active');
+      registerForm.classList.remove('auth-form-hidden');
+      loginForm.classList.add('auth-form-hidden');
+    }
+ 
+    tabLogin.addEventListener('click', showLogin);
+    tabRegister.addEventListener('click', showRegister);
+ 
+    document.querySelectorAll('.toggle-pw').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const targetId = btn.getAttribute('data-target');
+        const input = document.getElementById(targetId);
+        const isHidden = input.type === 'password';
+        input.type = isHidden ? 'text' : 'password';
+        btn.textContent = isHidden ? '隱藏' : '顯示';
+      });
+    });
+  })();
+</script>
+
 </body>
 </html>

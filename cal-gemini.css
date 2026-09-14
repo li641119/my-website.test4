@@ -5,6 +5,13 @@
     --work-border: #2196f3;
     --school-bg: #f3e5f5;
     --school-border: #9c27b0;
+    
+     --lc-green: #1B4B43;
+    --lc-green-dark: #0F2E29;
+    --lc-orange: #C9622A;
+    --lc-ink: #16211E;
+    --lc-ink-soft: #5B6B67;
+    --lc-line: #DDD8CB;
 }
 
 body { 
@@ -30,44 +37,233 @@ body {
     display: flex;
     flex-direction: column;
 }
+
+.sidebar-title {
+    text-align: center;
+    font-size: 18px;      /* 代替原本的 large，使用具體像素更精準 */
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: #2c3e50;       /* 深藍灰色，提升質感 */
+}
+
+.no-data-hint {
+    color: #7f8c8d;       /* 灰字 */
+    text-align: center;
+    margin-top: 20px;
+    font-size: 14px;
+}
+
+#monthly-stats {
+    flex-grow: 1;      /* 關鍵：讓清單佔據所有剩餘空間，把下方內容推到底部 */
+    overflow-y: auto;  /* 如果學生太多，清單可以滾動 */
+    margin-bottom: 20px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.no-record-tip {
+    color: #888;
+    text-align: center;
+    margin-top: 20px;
+}
+
+#monthly-stats::-webkit-scrollbar {
+    width: 5px;
+}
+
+#monthly-stats::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+#monthly-stats::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
 /* 讓顏色選擇器的內容物也變圓形 */
 input[type="color"]::-webkit-color-swatch-wrapper {padding: 0;}
 input[type="color"]::-webkit-color-swatch {border: none;border-radius: 50%;}
 input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 
-.stat-item { background: #f8f9fa; padding: 5px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
-.clear-btn { width: 100%; padding: 10px; background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; cursor: pointer; border-radius: 6px; margin-top: 10px; font-weight: bold; }
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    margin-bottom: 5px;
+    background: #fff;
+    border-radius: 6px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    width: 100%;
+    box-sizing: border-box;
+    justify-content: space-between; 
+}
+
+.stat-item .student-name {
+    flex-grow: 1;
+    font-weight: 600;
+    color: #333;
+    font-size: 15px;
+}
+
+.stat-item .info-right {
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.stat-item .info-right strong {
+    color: #2c3e50;
+    font-size: 15px;
+}
+
+.stat-item .info-right .unit {
+    font-size: 11px;
+    font-weight: normal;
+    color: #7f8c8d;
+}
+
+.stat-item .info-right .income {
+    font-size: 12px;
+    color: #098579;
+    font-weight: bold;
+    margin-top: 2px;
+}
+
+/* 圓形學生顏色選取器 */
+.stat-item input[type="color"] {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background-color: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    --round: 50%; /* 針對部分瀏覽器的自訂變數 */
+}
+
+/* 處理部分瀏覽器內層元件的黑邊與圓角 */
+.stat-item input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+.stat-item input[type="color"]::-webkit-color-swatch {
+    border: 1px solid #fff;
+    box-shadow: 0 0 4px rgba(0,0,0,0.2);
+    border-radius: 50%;
+}
+
+.clear-btn { 
+    width: 100%; 
+    padding: 10px; 
+    background: #ffebee; 
+    color: #c62828; 
+    border: 1px solid #ffcdd2; 
+    cursor: pointer; 
+    border-radius: 6px; 
+    margin-top: 10px; 
+    font-weight: bold; 
+    transition: background 0.2s;
+}
+
+.clear-btn:hover { background: #ffeaea; }
 .clear-btn.secondary { background: #fff3e0; color: #e65100; border-color: #ffe0b2; }
-.stats-summary　{ 
+.clear-btn.secondary:hover { background: #fff0db; }
+
+.stats-summary{ 
     background: #f8f9fa; 
     padding: 5px; 
     border-radius: 8px; 
     margin-top: auto;
 }
-#monthly-stats {
-    flex-grow: 1;      /* 關鍵：讓清單佔據所有剩餘空間，把下方內容推到底部 */
-    overflow-y: auto;  /* 如果學生太多，清單可以滾動 */
-    margin-bottom: 20px;
-}
+
 .stats-footer {
-    background: #f8f9fa;
-    padding: 5px;
-    border-radius: 8px;
-    margin-bottom: 5px;
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    margin-bottom: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
 
 .stats-footer p {
-    margin: 3px 0;
-    font-weight: bold;
-    font-size: 12px;
+    margin: 0;
+    background: #ffffff;
+    border: 1px solid #eaedf1;
+    padding: 12px 14px;
+    border-radius: 10px;
     display: flex;
-    justify-content: space-between; /* 讓文字和數字分開左右 */
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+    color: #546e7a;
+    font-weight: 500;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+    transition: all 0.2s ease;
+}
+
+.stats-footer p:hover {
+    border-color: #cfd8dc;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.04);
 }
 
 .stats-footer span {
-    color: #2c3e50;
     font-size: 14px;
+    font-weight: 700;
+    color: #2c3e50;
+    font-variant-numeric: tabular-nums;
 }
+
+.income-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+#month-income {
+    color: #2e7d32;
+    font-size: 15px;
+}
+
+.toggle-income-btn {
+    background: #f1f3f4;
+    border: none;
+    color: #455a64;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: bold;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+}
+
+.toggle-income-btn:hover {
+    background: #2c3e50;
+    color: #ffffff;
+}
+
+.income-amount {
+    font-weight: 700;
+    filter: blur(5px);
+    transition: filter 0.2s ease-in-out;
+    user-select: none;
+    display: inline-block;
+}
+
+.income-amount.revealed {
+    filter: blur(0);
+    user-select: auto;
+}
+
 
 /* --- 學生視角專屬樣式 --- */
 #student-view {
@@ -101,6 +297,7 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 
 .student-stat-card .label { font-size: 13px; color: #546e7a; margin-bottom: 5px; }
 .student-stat-card .stat-value { font-size: 24px; font-weight: bold; color: #1565c0; }
+
 /* 行事曆核心 */
 .calendar-container { 
     flex-grow: 1; 
@@ -109,6 +306,33 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     border-radius: 12px; 
     box-shadow: 0 4px 12px rgba(0,0,0,0.08);
  }
+
+ /* 課表卡片相對定位 */
+.calendar-event-card {
+    position: relative;
+    /* 原有的卡片樣式 */
+}
+
+/* 重疊/重複課程的數字徽章 */
+.duplicate-badge {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    background-color: #ef4444; /* 鮮豔的警示紅 */
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    pointer-events: none; /* 避免干擾卡片點擊 */
+}
+
+/* 重複課程的外框警示 */
+.is-duplicate {
+    border: 2px solid #ef4444 !important;
+}
+
 .schedule-grid { 
     display: grid; 
     grid-template-columns: 70px repeat(7, 1fr); 
@@ -178,8 +402,6 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 
 }
 
-/* 當行程高度較小時的處理 (例如 1 小時大約是 6 個 grid rows) */
-/* 你可以根據你的 Row 高度調整這個數值 */
 .placed-event strong {
     display: block;
     white-space: nowrap;
@@ -193,9 +415,6 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     white-space: nowrap;
 }
 
-
-/* 關鍵：高度過小時，強制讓資訊變橫向或縮小 */
-/* 假設 1 小時對應的高度大約是 50-60px 左右 */
 @container (max-height: 50px) {
     .placed-event {
         flex-direction: row;
@@ -214,55 +433,226 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     min-height: fit-content; /* 懸停時長開以顯示內容 */
 }
-.event-work { background: var(--work-bg); border-left: 4px solid var(--work-border); color: #0d47a1; font-size: 10px;}
-.event-school { background: var(--school-bg); border-left: 4px solid var(--school-border); color: #743fb5; line-height: 2; font-size: 11px; }
+.event-work { 
+    background: var(--work-bg); 
+    border-left: 4px solid var(--work-border); 
+    color: #0d47a1; 
+    font-size: 10px;
+}
+
 .grid-lines { 
     grid-column: 2 / span 7; 
     grid-row: 2 / span 84; 
     background-image: linear-gradient(#f0f0f0 1px, transparent 1px); 
     background-size: 100% calc(var(--unit-height)*6); pointer-events: none;z-index: 1; }
 
+    .hide {
+    display: none !important;
+}
+
+/* 現代置中排版 */
+.flex-center {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 10px;
+}
+
+/* 日曆上方月份標題文字 */
+.calendar-title {
+    text-align: center;
+    margin: 5px;
+    font-weight: 700;
+}
+
+/* 彈窗中自訂地點欄位 */
+.custom-loc-input {
+    display: none; /* 預設由 JS 判斷顯示 */
+    margin-top: 5px;
+}
+
+/* 彈窗中「每週重複」區塊 */
+.repeat-checkbox-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 0;
+    cursor: pointer;
+    background: #f0f7ff; /* 溫和的淡藍色提示背景 */
+    padding: 10px;
+    border-radius: 8px;
+    box-sizing: border-box;
+    transition: background 0.2s;
+}
+
+.repeat-checkbox-wrapper:hover {
+    background: #e1f0ff;
+}
+
+.repeat-checkbox-wrapper input[type="checkbox"] {
+    width: 18px !important;  /* 固定尺寸防止被拉扁 */
+    height: 18px !important;
+    margin: 0;
+    cursor: pointer;
+}
+
+.repeat-text {
+    font-size: 14px;
+    color: #2c3e50;
+    font-weight: bold;
+}
+
 /* 彈窗 */
-.modal { 
+#eventModal { 
     display: none; 
     position: fixed; 
-    z-index: 100; 
+    z-index: 1000; 
     left: 0; 
     top: 0; 
     width: 100%; 
     height: 100%; 
-    background: rgba(0,0,0,0.5);
+    background: rgba(0,0,0,0.55);
+    overflow-y: auto; 
+    -webkit-overflow-scrolling: touch; /* 讓 iOS 滑動更順暢 */
+    padding: 30px 0; /* 留上下間距，避免手機頂到邊緣 */
+    box-sizing: border-box;
 }
 
-.modal-content { 
-    background: white; 
-    margin: 5% auto; 
-    padding: 15px 20px;
-    width: 320px; 
-    border-radius: 12px; 
-    max-height: 90vh;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+.modal-content {
+    background-color: #fefefe;
+    margin: 0 auto; /* 靠水平置中 */
+    padding: 15px;
+    border-radius: 16px;
+    width: 90%; 
+    max-width: 450px; /* 限制 PC 桌機版不要太寬 */
+    position: relative;
+    box-sizing: border-box;
+    word-wrap: break-word;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15); /* 增加高級感的立體陰影 */
 }
 
 .modal-content label { 
     display: block; 
-    margin: 12px 0 4px; 
+    margin: 14px 0 6px 2px; 
     font-weight: bold; 
     font-size: 14px; 
+    color: #2c3e50;
 }
 
-.modal-content input, .modal-content select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
-.time-row { display: flex; gap: 10px; }
-.save-btn { 
-    background: #098579; 
-    color: white; 
-    border: none; 
-    flex-grow: 1; 
-    padding: 10px; 
-    border-radius: 6px; 
-    cursor: pointer; 
-    font-weight: bold; 
+.modal-content input, .modal-content select { 
+    width: 100%; 
+    padding: 10px 12px; 
+    border: 1px solid #ddd; 
+    border-radius: 10px; 
+    font-size: 14px;
+    color: #333;
+    background-color: #fff;
+    box-sizing: border-box; 
 }
+
+.modal-content input[type="checkbox"] {
+    width: auto;
+    margin-right: 8px;
+    cursor: pointer;
+}
+
+.time-row { 
+    display: flex; 
+    gap: 25px; /* 稍微拉開開始與結束時間的間距 */
+}
+
+/* ==========================================================================
+   彈窗內部：價格輸入欄位樣式優化
+   ========================================================================== */
+.price-row {
+    margin-bottom: 8px;
+}
+
+/* 價格輸入框的外包覆層，用來放「元」這個字 */
+.price-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+/* 讓價格輸入框針對數字類型做優化 */
+.price-input-wrapper input[type="number"] {
+    width: 100%;
+    padding: 10px 40px 10px 12px; /* 右邊留空間給「元」字 */
+    border: 1px solid #ddd;
+    border-radius: 10px; /* 修正：改成跟其他輸入框一致的圓角 */
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    box-sizing: border-box;
+}
+
+/* 焦點集中時的藍色邊框 */
+.price-input-wrapper input[type="number"]:focus {
+    border-color: #098579; /* 呼應你儲存按鈕的綠色調 */
+    outline: none;
+}
+
+/* 定位在輸入框右側的「元」單位文字 */
+.currency-unit {
+    position: absolute;
+    right: 14px;
+    color: #78909c;
+    font-size: 14px;
+    font-weight: bold;
+    pointer-events: none; /* 防止滑鼠點擊到文字時無法觸發輸入框 */
+}
+
+/* 移除 Chrome/Safari 數字輸入框預設的上下小箭頭，讓畫面更乾淨 */
+.price-input-wrapper input[type="number"]::-webkit-outer-spin-button,
+.price-input-wrapper input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* 彈窗底部的按鈕容器 */
+.modal-buttons {
+    display: flex;          /* 啟用 Flexbox 排版 */
+    justify-content: flex-end; /* 🚀 關鍵設定 1：讓容器內的所有元件整體「靠右對齊」 */
+    gap: 12px;              /* 按鈕之間的間距 */
+    margin-top: 24px;       /* 與上方輸入欄位的間距 */
+    width: 100%;            /* 確保容器撐滿白框寬度 */
+    box-sizing: border-box;
+}
+
+/* 容器底下的按鈕（同時套用到儲存與取消） */
+.modal-buttons button {
+    flex: 1;                /* 🚀 關鍵設定 2：平分剩餘空間，確保兩個按鈕寬度絕對「一樣大」 */
+    max-width: 120px;       /* 🚀 關鍵設定 3：限制按鈕最大寬度，避免在 PC 大螢幕上按鈕被拉得太長變醜 */
+    padding: 10px 16px;     /* 按鈕內襯上下左右的距離 */
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;     /* 按鈕圓角 */
+    border: none;
+    cursor: pointer;
+    transition: background 0.2s; /* 讓滑鼠懸停時的變色更平滑 */
+}
+
+/* 儲存按鈕的特定顏色（範例：綠色） */
+.modal-buttons .btn-save {
+    background-color: #098579;
+    color: white;
+    box-shadow: 0 2px 4px rgba(9, 133, 121, 0.2);
+}
+.modal-buttons .btn-save:hover {
+    background-color: #076b61;
+}
+
+/* 取消按鈕的特定顏色（範例：灰色） */
+.modal-buttons .btn-cancel {
+    background-color: #e0e0e0;
+    color: #333;
+}
+.modal-buttons .btn-cancel:hover {
+    background-color: #d5d5d5;
+}
+
 /* 右下角懸浮控制區 */
 .floating-controls {
     position: fixed;
@@ -324,53 +714,192 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 /* 登入介面專用樣式 */
 #login-container {
     position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    background: #f0f2f5; /* 輕盈的背景色 */
+    top: 0; 
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%; 
+    height: 100%;
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 9999; /* 確保在最上層 */
+    padding: 24px;
+    box-sizing: border-box;
+    font-family: 'Inter', "Microsoft JhengHei", sans-serif;
+    /* 修改：背景從純色改成深綠漸層，質感較好，與品牌色呼應 */
+    background:
+        radial-gradient(circle at 15% 20%, rgba(255,255,255,0.05), transparent 40%),
+        linear-gradient(160deg, var(--lc-green) 0%, var(--lc-green-dark) 100%);
 }
 
 .auth-box {
     background: white;
-    padding: 10px;
-    border-radius: 15px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    padding: 40px 36px 32px; /* 修改：加大留白，質感更好 */
+    border-radius: 10px;     /* 修改：從 15px 改為 10px，更俐落 */
+    /* 修改：陰影加深加大，讓卡片在深色背景上更立體 */
+    box-shadow: 0 20px 60px rgba(15, 46, 41, 0.35);
     width: 100%;
-    max-width: 400px;
-    text-align: center;
+    max-width: 380px;
+    text-align: left; /* 修改：從置中改為靠左，正式系統較常見的排版 */
+    box-sizing: border-box;
+}
+
+.auth-box h1 {
+    font-family: 'Archivo', "Microsoft JhengHei", sans-serif; /* 新增：標題用不同字重的顯示字體 */
+    font-size: 22px; /* 修改：從 24px 微調為 22px，搭配新版留白比例 */
+    font-weight: 800;
+    color: var(--lc-ink);
+    margin: 0 0 6px 0;
+}
+ 
+.login-subtitle {
+    font-size: 13.5px;
+    color: var(--lc-ink-soft);
+    margin: 0 0 28px 0;
+}
+
+.auth-tabs {
+    display: flex;
+    gap: 24px;
+    border-bottom: 1.5px solid var(--lc-line);
+    margin-bottom: 24px;
+}
+ 
+.auth-tab {
+    background: none;
+    border: none;
+    padding: 0 0 12px;
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--lc-ink-soft);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1.5px;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+ 
+.auth-tab.active {
+    color: var(--lc-green);
+    border-bottom-color: var(--lc-orange);
+}
+
+#login-form,
+#register-form {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 14px; /* 修改：改用 gap 控制欄位間距，取代原本每個 input 的 margin-bottom */
+}
+
+.auth-form-hidden {
+    display: none !important;
+}
+
+.field-label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--lc-ink);
+    margin-bottom: -6px;
 }
 
 .auth-box input {
-    width: 90%;
-    padding: 12px;
-    margin: 10px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
+    width: 100%; 
+    padding: 11px 12px; /* 修改：從 12px 微調 */
+    border: 1.5px solid var(--lc-line); /* 修改：邊框顏色改用變數，並加粗到 1.5px */
+    border-radius: 6px; /* 修改：從 8px 改為 6px */
+    font-size: 14px; /* 修改：從 15px 微調 */
+    background: #FBFAF7; /* 新增：預設狀態底色淺米，聚焦時變白，更有層次 */
+    color: var(--lc-ink);
+    box-sizing: border-box;
+    transition: border-color 0.15s ease, background 0.15s ease;
+    margin-bottom: 0; /* 修改：間距改由父層 gap 控制 */
+}
+
+.auth-box input:focus {
+    outline: none;
+    border-color: var(--lc-green);
+    background: #fff;
+}
+ 
+.auth-box input:focus-visible {
+    outline: 2px solid var(--lc-orange);
+    outline-offset: 1px;
+}
+
+.password-field {
+    position: relative;
+}
+ 
+.password-field input {
+    padding-right: 44px;
+}
+ 
+.toggle-pw {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    font-size: 12px;
+    color: var(--lc-ink-soft);
+    cursor: pointer;
+    padding: 4px;
+}
+
+#login-error,
+#register-error {
+    /* 修改：從單純的紅字，改成有底色的提示區塊，錯誤訊息更醒目 */
+    color: #B23A2E;
+    background: #FBEAE7;
+    border-radius: 6px;
+    padding: 0;
+    min-height: 0;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left; /* 修改：從置中改為靠左，跟卡片對齊 */
+}
+
+#login-error:not(:empty),
+#register-error:not(:empty) {
+    padding: 9px 11px;
+    margin-top: 4px;
 }
 
 .login-btn {
-    width: 30%;
-    padding: 8px;
-    background-color: #4A90E2; /* 配合你原本的標記顏色 */
-    color: white;
+    width: 100%; 
+    padding: 12px;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px; /* 修改：從 8px 改為 6px，跟輸入框一致 */
     cursor: pointer;
-    font-size: 16px;
-    font-weight: bold;
-    align-items: flex-end;
+    font-size: 14.5px; /* 修改：從 16px 微調 */
+    font-weight: 600;  /* 修改：從 bold 改為 600，更細緻 */
+    margin-top: 8px;   /* 修改：從 10px 微調 */
+    /* 修改：主色從藍色 #4A90E2 改成品牌深綠，跟整體視覺呼應 */
+    background-color: var(--lc-green);
+    color: white;
+    transition: background-color 0.2s;
 }
-
+ 
 .login-btn:hover {
-    background-color: #357abd;
+    background-color: var(--lc-green-dark); /* 修改：從 #357abd 改為深綠 */
 }
 
-/* --- 手機端 RWD (螢幕寬度小於 768px) --- */
+.login-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+ 
+.auth-footnote {
+    margin-top: 20px;
+    font-size: 12.5px;
+    color: var(--lc-ink-soft);
+    text-align: center;
+}
+
+
 @media (max-width: 768px) {
-    /* 1. 佈局調整：由橫排變直排 */
     .main-wrapper {
         flex-direction: column;
         padding: 10px;
@@ -379,16 +908,14 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 
     /* 2. 側邊欄：在手機上變成可摺疊或置底 */
     .sidebar {
-        width: auto;
+        width: 100%;
+        box-sizing: border-box;
         order: 2; /* 讓行事曆排在前面，統計排在後面 */
         padding: 15px;
     }
     
     .student-stats-row { flex-direction: column; }
-
-    #monthly-stats {
-        max-height: 200px; /* 限制高度，避免太長 */
-    }
+    #monthly-stats {max-height: 200px; /* 限制高度，避免太長 */}
 
     /* 3. 行事曆容器：允許橫向滾動 */
     .calendar-container {
@@ -424,9 +951,7 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
         font-size: 10px;
     }
     
-    .placed-event strong {
-        font-size: 11px;
-    }
+    .placed-event strong {font-size: 11px;}
 
     /* 6. 懸浮按鈕：縮小一點避免擋住內容 */
     .floating-controls {
@@ -442,9 +967,33 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 
     /* 7. 彈窗優化：佔滿寬度 */
     .modal-content {
-        width: 90%;
-        margin: 20% auto;
-        padding: 20px;
+        width: 92%;
+        /* 修改：margin 從 20% auto 改成 4vh auto。
+           20% 在手機上等於把彈窗往下推掉螢幕高度的 1/5，
+           內容一多，下面的按鈕就會被推出可視範圍外。 */
+        margin: 4vh auto;
+        padding: 18px;
+        /* 新增：限制彈窗最大高度為視窗的 88%，內容超過時彈窗自己捲動，
+           不再只依賴外層 #eventModal 的捲動（手機瀏覽器對 fixed + 100% 高度常有相容性問題）。 */
+        max-height: 88vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+ 
+    /* 新增：按鈕列在手機上黏在彈窗底部，不管表單多長，永遠看得到、按得到，
+       解決「滑不到儲存/取消按鈕」的問題。 */
+    .modal-buttons {
+        position: sticky;
+        bottom: 0;
+        background-color: #fefefe;
+        padding-top: 12px;
+        padding-bottom: 4px;
+        margin-top: 12px;
+    }
+ 
+    .modal-buttons button {
+        /* 修改：手機版拿掉 120px 上限，按鈕平分寬度，觸控範圍更大更好按 */
+        max-width: none;
     }
 
     .time-row {
@@ -456,15 +1005,14 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
         font-size: 16px; /* 防止 iOS 輸入時自動放大 */
         padding: 12px;
     }
+
+     .auth-box {
+        padding: 28px 24px 24px;
+    }
 }
 
 /* 針對超小螢幕的微調 */
 @media (max-width: 480px) {
-    .calendar-header h3 {
-        font-size: 14px;
-    }
-    
-    .day-header {
-        padding: 2px;
-    }
+    .calendar-header h3 {font-size: 14px;}
+    .day-header {padding: 2px;}
 }
