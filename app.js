@@ -63,7 +63,7 @@ if (registerForm) {
         }
  
         try {
-            await createUserWithEmailAndPassword(auth, email, password);
+            const cred = await createUserWithEmailAndPassword(auth, email, password);
  
             // 🔑 關鍵：把姓名跟 Email 對應存到 Firestore 的 students collection，
             // 之後這個人登入時，系統才能用 Email 反查出「這是哪個學生」，
@@ -74,8 +74,17 @@ if (registerForm) {
             // 否則系統會找不到對應的課程。
             await setDoc(doc(db, "students", name), { email: email }, { merge: true });
  
-            // 註冊成功後 Firebase 會自動幫這個帳號登入，
-            // 畫面切換交給下面的 onAuthStateChanged 統一處理，這裡不用做別的事
+            // ▼▼▼ 新增：註冊成功後，Firebase 預設會自動登入，
+            // 這裡改成主動登出，跳出成功提醒，清空表單並切回登入分頁，
+            // 讓學生用剛剛設定的帳密「重新登入」一次，體驗更明確。
+            await signOut(auth);
+ 
+            registerForm.reset();
+            alert("✅ 註冊成功！請使用剛剛設定的帳號密碼重新登入。");
+ 
+            const loginTabBtn = document.getElementById('tab-login');
+            if (loginTabBtn) loginTabBtn.click();
+            // ▲▲▲ 新增結束 ▲▲▲
         } catch (error) {
             console.error("註冊失敗:", error.code);
             const map = {
@@ -117,6 +126,33 @@ if (loginForm) {
     });
 }
  
+const forgotPasswordLink = document.getElementById('forgot-password-link');
+if (forgotPasswordLink) {
+    forgotPasswordLink.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const errorMsg = document.getElementById('login-error');
+        const email = document.getElementById('email').value.trim();
+ 
+        if (!email) {
+            errorMsg.textContent = '請先在上面的電子郵件欄位輸入你的帳號信箱';
+            return;
+        }
+ 
+        try {
+            await sendPasswordResetEmail(auth, email);
+            errorMsg.textContent = '';
+            alert('📧 重設密碼信件已寄出，請至信箱收信（記得也檢查垃圾郵件匣）');
+        } catch (error) {
+            console.error('寄送重設密碼信失敗:', error.code);
+            const map = {
+                'auth/invalid-email': 'Email 格式不正確',
+                'auth/user-not-found': '找不到這個 Email 對應的帳號',
+                'auth/network-request-failed': '網路連線異常，請檢查網路',
+            };
+            errorMsg.textContent = map[error.code] || ('寄送失敗：' + error.message);
+        }
+    });
+}
 
 /**驗證身分*/
 onAuthStateChanged(auth, async (user) => {
@@ -189,7 +225,8 @@ onAuthStateChanged(auth, async (user) => {
         if (unsubscribe) unsubscribe();
     }
 });
-
+// ▲▲▲ 修正結束 ▲▲▲
+ 
 /**及時監視器，同步更新（教練：全部課程） */
 function startLiveSync() {
     console.log("🔒 啟動全域資料同步 (教練視角)...");
@@ -303,29 +340,7 @@ function startStudentLiveSync(studentName) {
         }
     });
 }
-
-
-// 監聽登入表單
-document.getElementById('login-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const email = document.getElementById('email').value.trim();
-    const password = document.getElementById('password').value;
-    const errorMsg = document.getElementById('login-error');
-
-    signInWithEmailAndPassword(auth, email, password)
-        .then((userCredential) => {
-            console.log("登入成功:", userCredential.user.email);        
-        })
-        .catch((error) => {
-            console.error("登入出錯:", error.code);
-            if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
-                errorMsg.innerText = "帳號或密碼錯誤";
-            } else {
-                errorMsg.innerText = "登入失敗：" + error.message;
-            }
-        });
-});
-
+ 
 /**儲存或刪除時把資料從雲端存起來或是丟掉 */
 window.uploadEvent = async (eventData) => {
     try {
@@ -430,3 +445,4 @@ document.addEventListener('DOMContentLoaded', () => {
 });
  
 console.log("Firebase 監聽器已啟動");
+ 
