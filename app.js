@@ -36,119 +36,170 @@ export let currentUser = {
     name: ''
 };
 
-export function setCurrentUser(user) {
-    currentUser = user;
-    
-    // 1. 隱藏登入門禁
-    const loginContainer = document.getElementById('login-container');
-    if (loginContainer) loginContainer.style.display = 'none';
-
-    const coachView = document.getElementById('coach-view');
-    const studentView = document.getElementById('student-view');
-
-    // 2. 根據身分顯示對應畫面
-    if (currentUser.role === 'student') {
-        if (coachView) coachView.classList.add('hide');
-        if (studentView) studentView.style.display = 'block';
-
-        // 更新學生抬頭資訊
-        const nameEl = document.getElementById('student-name-display');
-        if (nameEl) nameEl.innerText = currentUser.name || '同學';
-    } else {
-        if (coachView) coachView.classList.remove('hide');
-        if (studentView) studentView.style.display = 'none';
-    }
-
-    // 3. 觸發重新渲染
-    renderAll();
-}
-
-// --- 3. 在表單登入或 Firebase 驗證成功處呼叫 ---
-const loginForm = document.getElementById('login-form');
-if (loginForm) {
-    loginForm.addEventListener('submit', async (e) => {
+const registerForm = document.getElementById('register-form');
+if (registerForm) {
+    registerForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        
-        // 假設從輸入框或 Firebase 驗證取得資料
-        const email = document.getElementById('email').value;
-        
-        // 範例：登入成功後切換身分
-        const userData = {
-            uid: "user_123",
-            email: email,
-            role: email.includes('student') ? 'student' : 'coach', // 依據實際驗證邏輯設定
-            name: "洪昀"
-        };
-        
-        setCurrentUser(userData);
+ 
+        const name = document.getElementById('register-name').value.trim();
+        const email = document.getElementById('register-email').value.trim();
+        const password = document.getElementById('register-password').value;
+        const confirm = document.getElementById('register-confirm').value;
+        const errorMsg = document.getElementById('register-error');
+        errorMsg.textContent = '';
+ 
+        if (!name) {
+            errorMsg.textContent = '請輸入姓名';
+            return;
+        }
+        if (password.length < 6) {
+            errorMsg.textContent = '密碼至少需要 6 個字元';
+            return;
+        }
+        if (password !== confirm) {
+            errorMsg.textContent = '兩次輸入的密碼不一致';
+            return;
+        }
+ 
+        try {
+            await createUserWithEmailAndPassword(auth, email, password);
+ 
+            // 🔑 關鍵：把姓名跟 Email 對應存到 Firestore 的 students collection，
+            // 之後這個人登入時，系統才能用 Email 反查出「這是哪個學生」，
+            // 進而只顯示屬於他自己的課程。
+            //
+            // ⚠️ 非常重要：這裡填的姓名，必須跟教練排課時在「行程名稱」欄位打的
+            // 學生姓名「一字不差」完全一樣（包含空白、全形半形），
+            // 否則系統會找不到對應的課程。
+            await setDoc(doc(db, "students", name), { email: email }, { merge: true });
+ 
+            // 註冊成功後 Firebase 會自動幫這個帳號登入，
+            // 畫面切換交給下面的 onAuthStateChanged 統一處理，這裡不用做別的事
+        } catch (error) {
+            console.error("註冊失敗:", error.code);
+            const map = {
+                'auth/email-already-in-use': '這個 Email 已經被註冊過了',
+                'auth/invalid-email': 'Email 格式不正確',
+                'auth/weak-password': '密碼至少需要 6 個字元',
+                'auth/network-request-failed': '網路連線異常，請檢查網路',
+            };
+            errorMsg.textContent = map[error.code] || ('註冊失敗：' + error.message);
+        }
     });
 }
 
+const loginForm = document.getElementById('login-form');
+if (loginForm) {
+    loginForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
+        const errorMsg = document.getElementById('login-error');
+        errorMsg.textContent = '';
+ 
+        signInWithEmailAndPassword(auth, email, password)
+            .then((userCredential) => {
+                console.log("登入成功:", userCredential.user.email);
+            })
+            .catch((error) => {
+                console.error("登入出錯:", error.code);
+                if (
+                    error.code === 'auth/invalid-credential' ||
+                    error.code === 'auth/wrong-password' ||
+                    error.code === 'auth/user-not-found'
+                ) {
+                    errorMsg.textContent = "帳號或密碼錯誤";
+                } else {
+                    errorMsg.textContent = "登入失敗：" + error.message;
+                }
+            });
+    });
+}
+ 
+
 /**驗證身分*/
-onAuthStateChanged(auth, user => {
+onAuthStateChanged(auth, async (user) => {
     const loginContainer = document.getElementById('login-container');
     const mainApp = document.getElementById('main-app'); 
     const coachView = document.getElementById('coach-view'); 
     const studentView = document.getElementById('student-view'); 
-
+    const sidebar = document.querySelector('.sidebar');
+ 
     if (user) {
         console.log("當前登入者:", user.email);
         loginContainer.style.display = 'none';
-        
-        // 2. 身分分流判斷
+ 
         if (user.email.toLowerCase() === COACH_EMAIL.toLowerCase()) {
             // --- 教練模式 ---
             console.log("教練模式已啟動");
-
+ 
+            currentUser = { uid: user.uid, email: user.email, role: 'coach', name: '教練' };
+ 
             coachView.classList.remove('hide');
             coachView.style.display = 'block';
-            
             mainApp.classList.remove('hide');
-            mainApp.style.display = 'flex'; // 顯示包含 sidebar 的大容器
-            
+            mainApp.style.display = 'flex';
             studentView.style.display = 'none';
-            
-            // 啟動資料監聽
+            if (sidebar) sidebar.style.display = 'flex';
+ 
             startLiveSync();
-            
-            if (window.renderCurrentWeek) window.renderCurrentWeek();
-            if (window.updateStats) window.updateStats();
         } else {
-            // --- 學生模式 ---
-            const sidebar = document.querySelector('.sidebar');
+            // --- 學生模式：用 Email 反查姓名 ---
+            let studentName = '';
+            try {
+                const q = query(collection(db, "students"), where("email", "==", user.email));
+                const snap = await getDocs(q);
+                if (!snap.empty) {
+                    studentName = snap.docs[0].id; // students collection 的文件 ID 就是姓名
+                } else {
+                    console.warn("⚠️ 找不到這個 Email 對應的學生姓名。可能原因：這個帳號不是透過註冊表單建立的，或教練還沒幫這個學生排過課。");
+                }
+            } catch (err) {
+                console.error("查詢學生姓名失敗:", err);
+            }
+ 
+            currentUser = { uid: user.uid, email: user.email, role: 'student', name: studentName };
+ 
             if (sidebar) sidebar.style.display = 'none';
-
             coachView.style.display = 'none';
+            coachView.classList.add('hide');
+            if (mainApp) mainApp.style.display = 'none';
             studentView.style.display = 'block';
-            console.log("啟動學生模式");
-            startStudentLiveSync(user.email);
+ 
+            const nameEl = document.getElementById('student-name-display');
+            if (nameEl) nameEl.innerText = studentName || '同學';
+ 
+            console.log("啟動學生模式，姓名比對用:", studentName || '(尚未找到對應姓名)');
+            startStudentLiveSync(studentName);
         }
+ 
+        renderAll();
     } else {
-    // 3. 登出狀態
+        // --- 登出狀態 ---
         console.log("目前為登出狀態");
         loginContainer.style.display = 'flex';
-        mainApp.style.display = 'none';
+        if (mainApp) mainApp.style.display = 'none';
         coachView.style.display = 'none';
         studentView.style.display = 'none';
-        
-        const sidebar = document.querySelector('.sidebar');
-        if (sidebar) sidebar.style.display = 'block';
-
+        if (sidebar) sidebar.style.display = 'flex';
+ 
+        currentUser = { uid: null, email: '', role: 'coach', name: '' };
+ 
         if (unsubscribe) unsubscribe();
     }
 });
 
-/**及時監視器，同步更新 */
+/**及時監視器，同步更新（教練：全部課程） */
 function startLiveSync() {
     console.log("🔒 啟動全域資料同步 (教練視角)...");
     if (unsubscribe) unsubscribe(); 
-
+ 
     const q = query(collection(db, "events"));
     unsubscribe = onSnapshot(q, (snapshot) => {
         const myEvents = [];
         snapshot.forEach((doc) => {
             const data = doc.data();
-
+ 
             let itemPrice = data.price !== undefined ? Number(data.price) : undefined;
             myEvents.push({ 
                 ...data, 
@@ -156,16 +207,16 @@ function startLiveSync() {
                 price: itemPrice // 強制導正型態
             });
         });
-
-
+ 
+ 
         console.log("📥 教練成功同步課表數量:", myEvents.length);
-
+ 
         // 強制確保全域與本地變數同時拿到最新的真相來源
         window.courses = myEvents;
         if (typeof courses !== 'undefined') {
             courses = myEvents;
         }
-
+ 
         // 🎨 渲染日曆 UI
         if (window.updateCalendarUI) {
             window.updateCalendarUI(myEvents);
@@ -179,30 +230,40 @@ function startLiveSync() {
         }
     });
 }
-
-function startStudentLiveSync(studentEmail) {
-    console.log(`🔒學生模式：正在同步 ${studentEmail} 的課程...`);
+ 
+// ▼▼▼ 修正：改成用「姓名」查詢，不再依賴 studentEmail 欄位。
+// 原因：studentEmail 欄位只有在教練排課「當下」剛好查得到 Email 才會寫入，
+// 如果學生是排課之後才註冊，舊的行程會永遠找不到 studentEmail，等於課表消失。
+// 改用姓名查詢後，不管註冊先後順序，只要姓名對得上就抓得到。
+function startStudentLiveSync(studentName) {
+    console.log(`🔒學生模式：正在同步 [${studentName}] 的課程...`);
     if (unsubscribe) unsubscribe();
-
+ 
+    if (!studentName) {
+        // 還沒找到對應姓名（例如剛註冊、教練還沒排過課），顯示空課表即可
+        if (window.updateCalendarUI) window.updateCalendarUI([]);
+        return;
+    }
+ 
     const q = query(
         collection(db, "events"), 
-        where("studentEmail", "==", studentEmail)
+        where("name", "==", studentName)
     );
     unsubscribe = onSnapshot(q, (snapshot) => {
         const myEvents = [];
         let totalMinutes = 0;
         let unpaidCount = 0;
-
+ 
         const now = new Date();
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth();
-
+ 
         snapshot.forEach((doc) => {
             const data = doc.data();
             myEvents.push({ ...data, id: data.id ? data.id.toString() : doc.id });
-
+ 
             // 計算時數邏輯
-            if (data.data) {
+            if (data.date) {
                 const courseDate = new Date(data.date);
                 // 只篩選跟今天同一個年月的文件
                 if (courseDate.getFullYear() === currentYear && courseDate.getMonth() === currentMonth) {
@@ -210,9 +271,8 @@ function startStudentLiveSync(studentEmail) {
                     // 1. 累加分鐘數 (優先抓 duration，沒有的話用格數算)
                     const duration = data.duration || ((data.endRow - data.startRow) * 10);
                     totalMinutes += duration;
-
-                    // 2. 統計未繳費堂數 (假設你在教課完成後，會去資料庫將該課堂標記為 isPaid: true)
-                    // 如果沒有標記或為 false，且類別是教球 (work)，就計入未繳費
+ 
+                    // 2. 統計未繳費堂數
                     if (data.type === 'work' && data.isPaid !== true) {
                         unpaidCount++;
                     }
@@ -220,9 +280,10 @@ function startStudentLiveSync(studentEmail) {
             }
         });
         // 1. 更新時數顯示
-        document.getElementById('student-total-hours').innerText = (totalMinutes / 60).toFixed(1);
-
-        // 2. 🚀【重大修正 2】：動態更新學生的繳費情形文字與顏色
+        const hoursEl = document.getElementById('student-total-hours');
+        if (hoursEl) hoursEl.innerText = (totalMinutes / 60).toFixed(1);
+ 
+        // 2. 動態更新學生的繳費情形文字與顏色
         const statusDisplay = document.getElementById('student-class-count');
         if (statusDisplay) {
             if (unpaidCount > 0) {
@@ -233,7 +294,7 @@ function startStudentLiveSync(studentEmail) {
                 statusDisplay.style.color = '#098579'; // 專屬綠色
             }
         }
-
+ 
         // 3. 核心：呼叫原本的行事曆更新函式
         if (window.updateCalendarUI) {
             console.log("🎨 正在為學生渲染大行事曆...");
@@ -283,23 +344,24 @@ window.uploadEvent = async (eventData) => {
         } else {
             console.warn(`⚠️ 找不到學生 [${eventData.name}] 的對照 Email，已自動預設為空字串。`);
         }
-
+ 
         // 2. 自動記憶機制
         await setDoc(studentRef, { 
             defaultPrice: currentPrice 
         }, { merge: true });
         console.log(`🚀 雲端已記憶 ${eventData.name} 的預設學費為: ${currentPrice} 元`);
-
+ 
         // 3. 儲存到原本的 events 集合
         const eventId = eventData.id.toString();
-
-        // 🚀【安全修正點 2】：強制對齊 Payload，確保絕對不會帶有 undefined 欄位
+ 
+        // 強制對齊 Payload，確保絕對不會帶有 undefined 欄位
+        // （studentEmail 保留下來作為備用資訊，目前查詢已改用姓名比對，不強制依賴它）
         const finalPayload = {
             ...eventData,
             price: currentPrice,
-            studentEmail: emailToUpload // 🌟 穩穩地帶入字串，Firebase 絕對放行
+            studentEmail: emailToUpload
         };
-
+ 
         await setDoc(doc(db, "events", eventId), finalPayload);
         console.log(`✅ 課程 [${eventData.name}] 金額 $${currentPrice} 已成功寫入雲端！`);
         
@@ -307,7 +369,7 @@ window.uploadEvent = async (eventData) => {
         console.error("❌ 上傳失敗:", e);
     }
 };
-
+ 
 window.removeEventFromCloud = async (eventId) => {
     try {
         if (!eventId) return;
@@ -318,13 +380,13 @@ window.removeEventFromCloud = async (eventId) => {
         console.log(`🗑️ 雲端行程 [ID: ${eventId}] 已成功從 Firestore 抹除`);
     } catch (e) {
         console.error("❌ 雲端刪除失敗:", e);
-    } // 👈 這是 catch 的結尾
+    }
 };
-
+ 
 document.addEventListener('DOMContentLoaded', () => {
     const toggleBtn = document.getElementById('toggle-income-btn');
     const incomeSpan = document.getElementById('month-income');
-
+ 
     if (toggleBtn && incomeSpan) {
         toggleBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -337,12 +399,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
-    //🚀 【新增】：當輸入/選擇學生姓名時，自動從 Firestore 撈出並帶入預設學費//
-
+ 
+    // 當輸入/選擇學生姓名時，自動從 Firestore 撈出並帶入預設學費
     const studentNameInput = document.getElementById('m-name');
     const priceInput = document.getElementById('m-price');
-
+ 
     if (studentNameInput && priceInput) {
         studentNameInput.addEventListener('input', async (e) => {
             const studentName = e.target.value.trim();
@@ -351,14 +412,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 priceInput.value = ''; // 名字被刪光時，清空價格
                 return;
             }
-
+ 
             try {
-                // 去雲端資料庫查找是否有這個學生的文件
                 const studentRef = doc(db, "students", studentName);
                 const studentSnap = await getDoc(studentRef);
-
+ 
                 if (studentSnap.exists() && studentSnap.data().defaultPrice !== undefined) {
-                    // 找到了！秒速自動帶入學費
                     priceInput.value = studentSnap.data().defaultPrice;
                     console.log(`🎯 自動帶入 ${studentName} 的預設學費: ${studentSnap.data().defaultPrice}`);
                 }
@@ -368,5 +427,5 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
-
+ 
 console.log("Firebase 監聽器已啟動");
