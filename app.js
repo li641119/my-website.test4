@@ -24,6 +24,7 @@ const auth = getAuth(app);
 
 let unsubscribe = null;
 // ▼▼▼ 修正：教練的判斷方式不變（寫死 Email），
+let suppressAuthUI = false;
 // 但整個檔案只會有「一套」登入/角色邏輯，不會再跟 firebase-auth.js 衝突 ▼▼▼
 const COACH_EMAIL = "li641119@gmail.com"; 
 
@@ -72,6 +73,9 @@ if (registerForm) {
             return;
         }
 
+        suppressAuthUI = true;
+        let cred = null;
+
         try {
             const cred = await createUserWithEmailAndPassword(auth, email, password);
 
@@ -97,6 +101,11 @@ if (registerForm) {
             // ▲▲▲ 新增結束 ▲▲▲
         } catch (error) {
             console.error("註冊失敗:", error.code);
+
+            if (cred) {
+                try { await signOut(auth); } catch (_) { /* 忽略 */ }
+            }
+
             const map = {
                 'auth/email-already-in-use': '這個 Email 已經被註冊過了',
                 'auth/invalid-email': 'Email 格式不正確',
@@ -104,6 +113,9 @@ if (registerForm) {
                 'auth/network-request-failed': '網路連線異常，請檢查網路',
             };
             errorMsg.textContent = map[error.code] || ('註冊失敗：' + error.message);
+        }finally {
+            // ▼▼▼ 新增：不管成功失敗，註冊流程結束就恢復正常監聽 ▼▼▼
+            suppressAuthUI = false;
         }
     });
 }
@@ -180,6 +192,12 @@ if (forgotPasswordLink) {
 // 用 Email 反查出他的姓名，設定好 currentUser 後才開始同步課表。
 // ------------------------------------------------------------
 onAuthStateChanged(auth, async (user) => {
+
+    if (suppressAuthUI) {
+        console.log("（註冊流程進行中，暫時忽略這次 onAuthStateChanged）");
+        return;
+    }
+    
     const loginContainer = document.getElementById('login-container');
     const mainApp = document.getElementById('main-app'); 
     const coachView = document.getElementById('coach-view'); 
