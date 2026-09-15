@@ -12,7 +12,6 @@
 </head>
 
 <body>
-<!--所有人都需要通過這關門禁大廳-->
     <div id="login-container">
         <div class="auth-box">
             <h1>桌球教學管理系統</h1>
@@ -54,10 +53,22 @@
                     <button type="button" class="toggle-pw" data-target="register-confirm">顯示</button>
                 </div>
  
+                <!-- ▼▼▼ 新增：身份選擇，決定登入後看到教練版還是學生版 ▼▼▼ -->
+                <span class="field-label">我的身份</span>
+                <select id="register-role">
+                    <option value="student">學生</option>
+                    <option value="coach">教練</option>
+                </select>
+ 
+                <div id="coach-code-field" class="auth-form-hidden">
+                    <span class="field-label">教練授權碼</span>
+                    <input type="text" id="register-coach-code" placeholder="請向系統管理者索取">
+                </div>
+                <!-- ▲▲▲ 新增結束 ▲▲▲ -->
+ 
                 <button type="submit" class="login-btn">建立帳號</button>
             </form>
             <div id="register-error"></div>
-            <!-- ▲▲▲ 新增結束 ▲▲▲ -->
  
             <p class="auth-footnote">忘記密碼或帳號問題，請聯絡教練協助處理。</p>
         </div>
@@ -197,6 +208,8 @@
             </div>
         </div>
     </div>
+
+<script type="module" src="firebase-auth.js"></script>
 
 <script type="module" src="app.js"></script>
 <script type="module" src="cal-gemini.js"></script>
