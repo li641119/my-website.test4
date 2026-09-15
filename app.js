@@ -4,8 +4,9 @@ import {
     getFirestore, collection, query, where, getDocs, onSnapshot, setDoc, doc, deleteDoc, getDoc
 } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 // 1. 新增：匯入 Firebase Auth 模組
+
 import { 
-    getAuth, signInWithEmailAndPassword, onAuthStateChanged
+    getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged 
 } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
 
 const firebaseConfig = {
