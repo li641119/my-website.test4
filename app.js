@@ -5,7 +5,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { 
     getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, 
-    onAuthStateChanged, sendPasswordResetEmail, signOut
+    onAuthStateChanged, sendPasswordResetEmail, signOut, setPersistence, browserSessionPersistence
 } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
 
 const firebaseConfig = {
@@ -24,7 +24,7 @@ const auth = getAuth(app);
 
 setPersistence(auth, browserSessionPersistence)
     .catch((err) => console.error("設定登入狀態保存方式失敗:", err));
-    
+
 let unsubscribe = null;
 // ▼▼▼ 修正：教練的判斷方式不變（寫死 Email），
 let suppressAuthUI = false;
