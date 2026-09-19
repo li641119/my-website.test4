@@ -5,7 +5,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { 
     getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, 
-    onAuthStateChanged, sendPasswordResetEmail, signOut, setPersistence, browserSessionPersistence
+    onAuthStateChanged, sendPasswordResetEmail, signOut,
+    setPersistence, browserSessionPersistence
 } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
 
 const firebaseConfig = {
@@ -22,12 +23,27 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
+// ▼▼▼ 新增：設定登入狀態的保存方式
+// Firebase 預設是 browserLocalPersistence：登入狀態會一直存在瀏覽器裡，
+// 關掉分頁、甚至關掉整個瀏覽器再打開，都還記得你已登入 —— 這就是你遇到的「自動登入」。
+//
+// 改成 browserSessionPersistence 後：
+//   ✅ 關掉分頁 / 關掉瀏覽器 → 下次打開會停留在登入頁面
+//   ✅ 在同一個分頁裡按 F5 重新整理 → 仍然保持登入（不會被莫名其妙踢出去）
+//
+// 如果你希望「連重新整理都要重新登入」，把下面的 browserSessionPersistence
+// 換成 inMemoryPersistence（記得上面 import 也要一起改），
+// 但那樣使用者不小心按到 F5 就會被登出，體驗會比較差。
 setPersistence(auth, browserSessionPersistence)
     .catch((err) => console.error("設定登入狀態保存方式失敗:", err));
+// ▲▲▲ 新增結束 ▲▲▲
 
 let unsubscribe = null;
-// ▼▼▼ 修正：教練的判斷方式不變（寫死 Email），
+// ▼▼▼ 新增：註冊流程進行中時，暫停 onAuthStateChanged 的畫面切換邏輯，
+// 避免 createUserWithEmailAndPassword 自動登入的瞬間閃過 student-view
 let suppressAuthUI = false;
+// ▲▲▲ 新增結束 ▲▲▲
+// ▼▼▼ 修正：教練的判斷方式不變（寫死 Email），
 // 但整個檔案只會有「一套」登入/角色邏輯，不會再跟 firebase-auth.js 衝突 ▼▼▼
 const COACH_EMAIL = "li641119@gmail.com"; 
 
@@ -76,11 +92,13 @@ if (registerForm) {
             return;
         }
 
+        // ▼▼▼ 新增：開始註冊流程，暫停畫面自動切換 ▼▼▼
         suppressAuthUI = true;
         let cred = null;
+        // ▲▲▲ 新增結束 ▲▲▲
 
         try {
-            const cred = await createUserWithEmailAndPassword(auth, email, password);
+            cred = await createUserWithEmailAndPassword(auth, email, password);
 
             // 🔑 關鍵：把姓名跟 Email 對應存到 Firestore 的 students collection，
             // 之後這個人登入時，系統才能用 Email 反查出「這是哪個學生」，
@@ -91,7 +109,7 @@ if (registerForm) {
             // 否則系統會找不到對應的課程。
             await setDoc(doc(db, "students", name), { email: email }, { merge: true });
 
-            // ▼▼▼ 新增：註冊成功後，Firebase 預設會自動登入，
+            // 註冊成功後，Firebase 預設會自動登入，
             // 這裡改成主動登出，跳出成功提醒，清空表單並切回登入分頁，
             // 讓學生用剛剛設定的帳密「重新登入」一次，體驗更明確。
             await signOut(auth);
@@ -101,13 +119,15 @@ if (registerForm) {
 
             const loginTabBtn = document.getElementById('tab-login');
             if (loginTabBtn) loginTabBtn.click();
-            // ▲▲▲ 新增結束 ▲▲▲
         } catch (error) {
-            console.error("註冊失敗:", error.code);
+            console.error("註冊失敗:", error.code || error);
 
+            // ▼▼▼ 新增：如果帳號其實已經建立成功（只是後面 setDoc 或 signOut 失敗），
+            // 還是要把它登出，避免使用者卡在「有登入但畫面沒切換」的詭異狀態 ▼▼▼
             if (cred) {
                 try { await signOut(auth); } catch (_) { /* 忽略 */ }
             }
+            // ▲▲▲ 新增結束 ▲▲▲
 
             const map = {
                 'auth/email-already-in-use': '這個 Email 已經被註冊過了',
@@ -116,9 +136,10 @@ if (registerForm) {
                 'auth/network-request-failed': '網路連線異常，請檢查網路',
             };
             errorMsg.textContent = map[error.code] || ('註冊失敗：' + error.message);
-        }finally {
+        } finally {
             // ▼▼▼ 新增：不管成功失敗，註冊流程結束就恢復正常監聽 ▼▼▼
             suppressAuthUI = false;
+            // ▲▲▲ 新增結束 ▲▲▲
         }
     });
 }
@@ -188,6 +209,23 @@ if (forgotPasswordLink) {
 // ▲▲▲ 新增結束 ▲▲▲
 
 // ------------------------------------------------------------
+// ▼▼▼ 新增：登出按鈕
+// ------------------------------------------------------------
+const logoutBtn = document.getElementById('logout-btn');
+if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+        try {
+            await signOut(auth);
+            // 畫面切換交給 onAuthStateChanged 處理
+        } catch (err) {
+            console.error("登出失敗:", err);
+            alert("登出失敗，請重新整理頁面再試一次");
+        }
+    });
+}
+// ▲▲▲ 新增結束 ▲▲▲
+
+// ------------------------------------------------------------
 // ▼▼▼ 修正：驗證身分 / 畫面切換
 // 原本這裡完全沒有設定 currentUser，導致 cal-gemini.js 拿去比對姓名時
 // 永遠是初始值（空字串），學生怎麼樣都看不到自己的課。
@@ -195,21 +233,27 @@ if (forgotPasswordLink) {
 // 用 Email 反查出他的姓名，設定好 currentUser 後才開始同步課表。
 // ------------------------------------------------------------
 onAuthStateChanged(auth, async (user) => {
-
+    // ▼▼▼ 新增：註冊流程進行中，先不要理會這次的登入狀態改變，
+    // 避免畫面在「註冊完自動登入」跟「我們手動登出」之間閃一下 student-view
     if (suppressAuthUI) {
         console.log("（註冊流程進行中，暫時忽略這次 onAuthStateChanged）");
         return;
     }
+    // ▲▲▲ 新增結束 ▲▲▲
 
     const loginContainer = document.getElementById('login-container');
     const mainApp = document.getElementById('main-app'); 
     const coachView = document.getElementById('coach-view'); 
     const studentView = document.getElementById('student-view'); 
     const sidebar = document.querySelector('.sidebar');
+    const logoutBtnEl = document.getElementById('logout-btn');
 
     if (user) {
         console.log("當前登入者:", user.email);
         loginContainer.style.display = 'none';
+        // ▼▼▼ 新增：登入後顯示登出按鈕 ▼▼▼
+        if (logoutBtnEl) logoutBtnEl.classList.remove('hide');
+        // ▲▲▲ 新增結束 ▲▲▲
 
         if (user.email.toLowerCase() === COACH_EMAIL.toLowerCase()) {
             // --- 教練模式 ---
@@ -260,6 +304,9 @@ onAuthStateChanged(auth, async (user) => {
         // --- 登出狀態 ---
         console.log("目前為登出狀態");
         loginContainer.style.display = 'flex';
+        // ▼▼▼ 新增：登出後隱藏登出按鈕 ▼▼▼
+        if (logoutBtnEl) logoutBtnEl.classList.add('hide');
+        // ▲▲▲ 新增結束 ▲▲▲
         if (mainApp) mainApp.style.display = 'none';
         coachView.style.display = 'none';
         studentView.style.display = 'none';
