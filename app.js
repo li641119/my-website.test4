@@ -22,6 +22,9 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
+setPersistence(auth, browserSessionPersistence)
+    .catch((err) => console.error("設定登入狀態保存方式失敗:", err));
+    
 let unsubscribe = null;
 // ▼▼▼ 修正：教練的判斷方式不變（寫死 Email），
 let suppressAuthUI = false;
@@ -197,7 +200,7 @@ onAuthStateChanged(auth, async (user) => {
         console.log("（註冊流程進行中，暫時忽略這次 onAuthStateChanged）");
         return;
     }
-    
+
     const loginContainer = document.getElementById('login-container');
     const mainApp = document.getElementById('main-app'); 
     const coachView = document.getElementById('coach-view'); 

@@ -898,6 +898,27 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     text-align: center;
 }
 
+#logout-btn {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    z-index: 2000;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    background: var(--lc-green-dark);
+    color: #EFEAE0;
+    font-family: "Microsoft JhengHei", sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    transition: background 0.2s;
+}
+ 
+#logout-btn:hover {
+    background: #000;
+}
 
 @media (max-width: 768px) {
     .main-wrapper {
