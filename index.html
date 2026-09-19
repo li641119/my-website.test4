@@ -12,8 +12,9 @@
 </head>
 
 <body>
+<!-- ▼▼▼ 新增：登出按鈕（登入後才顯示，由 app.js 控制） ▼▼▼ -->
 <button type="button" id="logout-btn" class="hide">登出</button>
-
+<!-- ▲▲▲ 新增結束 ▲▲▲ -->
 <!--所有人都需要通過這關門禁大廳-->
     <div id="login-container">
         <div class="auth-box">
@@ -33,6 +34,12 @@
                     <input type="password" id="password" placeholder="輸入密碼" required>
                     <button type="button" class="toggle-pw" data-target="password">顯示</button>
                 </div>
+                <!-- ▼▼▼ 新增：記住我的帳號 ▼▼▼ -->
+                <label style="display:flex; align-items:center; gap:6px; font-size:13px; color: var(--lc-ink-soft); margin-top:-4px; cursor:pointer;">
+                    <input type="checkbox" id="remember-email" style="width:auto; margin:0;">
+                    記住我的帳號
+                </label>
+                <!-- ▲▲▲ 新增結束 ▲▲▲ -->
                 <button type="submit" class="login-btn">登入</button>
                 <!-- ▼▼▼ 新增：忘記密碼連結 ▼▼▼ -->
                 <a href="#" id="forgot-password-link" class="auth-footnote" style="display:block; margin-top:12px; cursor:pointer;">忘記密碼？</a>

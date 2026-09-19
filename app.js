@@ -146,6 +146,26 @@ if (registerForm) {
 // ▲▲▲ 新增結束 ▲▲▲
 
 // ------------------------------------------------------------
+// ▼▼▼ 新增：記住我的帳號（只記 Email，不記密碼，密碼絕對不能存在瀏覽器裡）
+// ------------------------------------------------------------
+const REMEMBER_EMAIL_KEY = 'coach_app_remembered_email';
+
+document.addEventListener('DOMContentLoaded', () => {
+    const emailInput = document.getElementById('email');
+    const rememberCheckbox = document.getElementById('remember-email');
+    const passwordInput = document.getElementById('password');
+    const savedEmail = localStorage.getItem(REMEMBER_EMAIL_KEY);
+
+    if (savedEmail && emailInput && rememberCheckbox) {
+        emailInput.value = savedEmail;
+        rememberCheckbox.checked = true;
+        // 帳號已經帶好了，游標直接跳到密碼欄位，使用者只要打密碼
+        if (passwordInput) passwordInput.focus();
+    }
+});
+// ▲▲▲ 新增結束 ▲▲▲
+
+// ------------------------------------------------------------
 // 登入表單邏輯（原本檔案下面已經有一份正確的，這裡保留唯一一份）
 // ------------------------------------------------------------
 const loginForm = document.getElementById('login-form');
@@ -155,11 +175,20 @@ if (loginForm) {
         const email = document.getElementById('email').value.trim();
         const password = document.getElementById('password').value;
         const errorMsg = document.getElementById('login-error');
+        const rememberCheckbox = document.getElementById('remember-email');
         errorMsg.textContent = '';
 
         signInWithEmailAndPassword(auth, email, password)
             .then((userCredential) => {
                 console.log("登入成功:", userCredential.user.email);
+
+                // ▼▼▼ 新增：依勾選狀態儲存或清除記住的帳號 ▼▼▼
+                if (rememberCheckbox && rememberCheckbox.checked) {
+                    localStorage.setItem(REMEMBER_EMAIL_KEY, email);
+                } else {
+                    localStorage.removeItem(REMEMBER_EMAIL_KEY);
+                }
+                // ▲▲▲ 新增結束 ▲▲▲
             })
             .catch((error) => {
                 console.error("登入出錯:", error.code);
