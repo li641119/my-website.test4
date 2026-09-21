@@ -271,7 +271,6 @@ onAuthStateChanged(auth, async (user) => {
     // ▲▲▲ 新增結束 ▲▲▲
 
     const loginContainer = document.getElementById('login-container');
-    const mainApp = document.getElementById('main-app'); 
     const coachView = document.getElementById('coach-view'); 
     const studentView = document.getElementById('student-view'); 
     const sidebar = document.querySelector('.sidebar');
@@ -292,9 +291,11 @@ onAuthStateChanged(auth, async (user) => {
 
             coachView.classList.remove('hide');
             coachView.style.display = 'block';
-            mainApp.classList.remove('hide');
-            mainApp.style.display = 'flex';
+            // ▼▼▼ 修改：main-app 現在是「行事曆」這個 coach-panel，
+            // 顯示與否交給 CSS 的 .coach-panel.active 規則統一處理，
+            // 不再用 inline style 直接設定，避免跟新的導覽列切換邏輯打架 ▼▼▼
             studentView.style.display = 'none';
+            // ▲▲▲ 修改結束 ▲▲▲
             if (sidebar) sidebar.style.display = 'flex';
 
             startLiveSync();
@@ -318,7 +319,6 @@ onAuthStateChanged(auth, async (user) => {
             if (sidebar) sidebar.style.display = 'none';
             coachView.style.display = 'none';
             coachView.classList.add('hide');
-            if (mainApp) mainApp.style.display = 'none';
             studentView.style.display = 'block';
 
             const nameEl = document.getElementById('student-name-display');
@@ -336,7 +336,6 @@ onAuthStateChanged(auth, async (user) => {
         // ▼▼▼ 新增：登出後隱藏登出按鈕 ▼▼▼
         if (logoutBtnEl) logoutBtnEl.classList.add('hide');
         // ▲▲▲ 新增結束 ▲▲▲
-        if (mainApp) mainApp.style.display = 'none';
         coachView.style.display = 'none';
         studentView.style.display = 'none';
         if (sidebar) sidebar.style.display = 'flex';
@@ -564,5 +563,70 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+// ------------------------------------------------------------
+// ▼▼▼ 新增：教練頁面頂部導覽列（行事曆 / 學生資料庫 / 本月收入）切換邏輯
+// ------------------------------------------------------------
+async function renderStudentDbPanel() {
+    const listEl = document.getElementById('student-db-list');
+    if (!listEl) return;
+
+    listEl.innerHTML = '<p class="no-data-hint">讀取中...</p>';
+
+    try {
+        const snap = await getDocs(collection(db, "students"));
+        if (snap.empty) {
+            listEl.innerHTML = '<p class="no-data-hint">目前還沒有學生資料</p>';
+            return;
+        }
+
+        const rows = [];
+        snap.forEach((docSnap) => {
+            const data = docSnap.data();
+            const emailText = data.email ? data.email : '（尚未註冊帳號）';
+            const priceText = data.defaultPrice !== undefined ? `$${data.defaultPrice}` : '—';
+            rows.push(`
+                <div class="db-row">
+                    <span class="db-name">${docSnap.id}</span>
+                    <span class="db-meta">${emailText} · 預設學費 ${priceText}</span>
+                </div>
+            `);
+        });
+        listEl.innerHTML = rows.join('');
+    } catch (err) {
+        console.error("讀取學生資料庫失敗:", err);
+        listEl.innerHTML = '<p class="no-data-hint">讀取失敗，請重新整理再試一次</p>';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const navBtns = document.querySelectorAll('.coach-nav-btn');
+
+    navBtns.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const targetPanelId = btn.dataset.panel;
+
+            // 切換按鈕的 active 樣式
+            navBtns.forEach((b) => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            // 切換畫面：只有 data-panel-id 對得上的那個才顯示
+            document.querySelectorAll('.coach-panel').forEach((panel) => {
+                panel.classList.toggle('active', panel.dataset.panelId === targetPanelId);
+            });
+
+            // 切換到「本月收入」時，重新計算並渲染（cal-gemini.js 匯出的函式）
+            if (targetPanelId === 'panel-income' && typeof window.renderIncomePanel === 'function') {
+                window.renderIncomePanel();
+            }
+
+            // 切換到「學生資料庫」時，重新從 Firestore 撈一次最新資料
+            if (targetPanelId === 'panel-students') {
+                renderStudentDbPanel();
+            }
+        });
+    });
+});
+// ▲▲▲ 新增結束 ▲▲▲
 
 console.log("Firebase 監聽器已啟動");

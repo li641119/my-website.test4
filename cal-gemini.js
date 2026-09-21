@@ -315,6 +315,42 @@ window.updateStats = function() {
     renderAll();
 }
 
+// ------------------------------------------------------------
+// ▼▼▼ 新增：本月收入畫面的渲染函式
+// 直接沿用 calculateMonthlyData（跟側邊欄用的是同一份計算邏輯，數字一定會對得起來），
+// 只是把結果畫到新的「本月收入」畫面上，不是側邊欄。
+// 「本月」的定義跟側邊欄一致：以目前行事曆瀏覽到的那一週為準，不是今天的實際月份。
+// ------------------------------------------------------------
+export function renderIncomePanel() {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const monthData = calculateMonthlyData(year, month);
+
+    const hoursEl = document.getElementById('income-panel-total-hours');
+    if (hoursEl) hoursEl.innerText = `${(monthData.totalMinutes / 60).toFixed(1)} 小時`;
+
+    const incomeEl = document.getElementById('income-panel-total-income');
+    if (incomeEl) incomeEl.innerText = `$${Math.round(monthData.totalIncome).toLocaleString()}`;
+
+    const breakdownEl = document.getElementById('income-panel-breakdown');
+    if (!breakdownEl) return;
+
+    const entries = Object.entries(monthData.studentStats).sort((a, b) => b[1].money - a[1].money);
+    if (entries.length === 0) {
+        breakdownEl.innerHTML = '<p class="no-data-hint">本月尚無教球紀錄</p>';
+        return;
+    }
+
+    breakdownEl.innerHTML = entries.map(([name, data]) => `
+        <div class="db-row">
+            <span class="db-name">${name}</span>
+            <span class="db-meta">${(data.mins / 60).toFixed(1)} 小時 · $${Math.round(data.money).toLocaleString()}</span>
+        </div>
+    `).join('');
+}
+window.renderIncomePanel = renderIncomePanel;
+// ▲▲▲ 新增結束 ▲▲▲
+
 // --- 5. 繪製行程方塊 (修正刪除與顏色套用邏輯) ---
 function drawEvent(course, container, dStr, col, overlapCount = 1) {
     const div = document.createElement('div');

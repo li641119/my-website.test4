@@ -26,12 +26,12 @@
                 <button type="button" class="auth-tab" id="tab-register">註冊</button>
             </div>
 
-            <form id="login-form">
+            <form id="login-form" autocomplete="off">
                 <span class="field-label">電子郵件</span>
-                <input type="email" id="email" placeholder="you@example.com" required>
+                <input type="email" id="email" placeholder="you@example.com" autocomplete="username" required>
                  <span class="field-label">密碼</span>
                 <div class="password-field">
-                    <input type="password" id="password" placeholder="輸入密碼" required>
+                    <input type="password" id="password" placeholder="輸入密碼" autocomplete="off" required>
                     <button type="button" class="toggle-pw" data-target="password">顯示</button>
                 </div>
                 <!-- ▼▼▼ 新增：記住我的帳號 ▼▼▼ -->
@@ -76,7 +76,16 @@
 
 <!--教練專用頁面-->
     <div id="coach-view" class="hide">
-        <div class="main-wrapper" id="main-app">
+        <!-- ▼▼▼ 新增：頂部導覽列，切換教練的三個畫面 ▼▼▼ -->
+        <div class="coach-nav">
+            <button type="button" class="coach-nav-btn active" data-panel="panel-calendar">📅 行事曆</button>
+            <button type="button" class="coach-nav-btn" data-panel="panel-students">👥 學生資料庫</button>
+            <button type="button" class="coach-nav-btn" data-panel="panel-income">💰 本月收入</button>
+        </div>
+        <!-- ▲▲▲ 新增結束 ▲▲▲ -->
+
+        <!-- ▼▼▼ 修改：main-wrapper 現在是「行事曆」這個畫面，內容完全不變 ▼▼▼ -->
+        <div class="main-wrapper coach-panel active" id="main-app" data-panel-id="panel-calendar">
             <div class="sidebar">
                 <div class="sidebar-title">📊學生每月上課統計</div>
                 <div id="monthly-stats">
@@ -125,6 +134,40 @@
                 </div>
             </div>
         </div>
+        <!-- ▲▲▲ 修改結束（main-wrapper 本身內容沒有變） ▲▲▲ -->
+
+        <!-- ▼▼▼ 新增：學生資料庫畫面（目前先顯示姓名/Email/預設學費，之後課程包做好可以加剩餘堂數） ▼▼▼ -->
+        <div class="coach-panel" id="panel-students" data-panel-id="panel-students">
+            <div class="panel-inner">
+                <h2 class="panel-title">學生資料庫</h2>
+                <div id="student-db-list">
+                    <p class="no-data-hint">讀取中...</p>
+                </div>
+            </div>
+        </div>
+        <!-- ▲▲▲ 新增結束 ▲▲▲ -->
+
+        <!-- ▼▼▼ 新增：本月收入畫面（重複利用現有的月統計計算邏輯，只是換一個比較大的版面呈現） ▼▼▼ -->
+        <div class="coach-panel" id="panel-income" data-panel-id="panel-income">
+            <div class="panel-inner">
+                <h2 class="panel-title">本月收入總覽</h2>
+                <div class="income-summary-row">
+                    <div class="income-summary-card">
+                        <span class="label">本月總時數</span>
+                        <span class="value" id="income-panel-total-hours">0</span>
+                    </div>
+                    <div class="income-summary-card">
+                        <span class="label">本月總收入</span>
+                        <span class="value" id="income-panel-total-income">0</span>
+                    </div>
+                </div>
+                <h3 class="panel-subtitle">依學生分項</h3>
+                <div id="income-panel-breakdown">
+                    <p class="no-data-hint">讀取中...</p>
+                </div>
+            </div>
+        </div>
+        <!-- ▲▲▲ 新增結束 ▲▲▲ -->
     </div>
 
     <!--學生專用頁面-->
