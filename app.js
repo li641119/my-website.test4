@@ -565,7 +565,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ------------------------------------------------------------
-// ▼▼▼ 新增：教練頁面頂部導覽列（行事曆 / 學生資料庫 / 本月收入）切換邏輯
+// ▼▼▼ 修改：學生資料庫畫面，加上展開查看堂數、調整堂數、新增/刪除學生
 // ------------------------------------------------------------
 async function renderStudentDbPanel() {
     const listEl = document.getElementById('student-db-list');
@@ -576,19 +576,37 @@ async function renderStudentDbPanel() {
     try {
         const snap = await getDocs(collection(db, "students"));
         if (snap.empty) {
-            listEl.innerHTML = '<p class="no-data-hint">目前還沒有學生資料</p>';
+            listEl.innerHTML = '<p class="no-data-hint">目前還沒有學生資料，點右上角「＋ 新增學生」開始建立</p>';
             return;
         }
 
         const rows = [];
         snap.forEach((docSnap) => {
             const data = docSnap.data();
+            const name = docSnap.id;
             const emailText = data.email ? data.email : '（尚未註冊帳號）';
             const priceText = data.defaultPrice !== undefined ? `$${data.defaultPrice}` : '—';
+            // 【新增】堂數：如果 Firestore 裡還沒有這個欄位，預設顯示 10/10
+            const total = data.totalSessions !== undefined ? data.totalSessions : 10;
+            const remaining = data.remainingSessions !== undefined ? data.remainingSessions : 10;
+
             rows.push(`
-                <div class="db-row">
-                    <span class="db-name">${docSnap.id}</span>
-                    <span class="db-meta">${emailText} · 預設學費 ${priceText}</span>
+                <div class="db-row-wrap">
+                    <div class="db-row db-row-clickable" onclick="toggleStudentDetail('${name}')">
+                        <span class="db-name">▸ ${name}</span>
+                        <span class="db-meta">${emailText} · 預設學費 ${priceText}</span>
+                    </div>
+                    <div class="db-detail hide" id="detail-${name}">
+                        <div class="db-detail-row">
+                            <span>上課堂數</span>
+                            <span class="session-count">
+                                <button type="button" onclick="adjustSession('${name}', -1)">－</button>
+                                <span><strong id="remain-${name}">${remaining}</strong> / <strong id="total-${name}">${total}</strong></span>
+                                <button type="button" onclick="adjustSession('${name}', 1)">＋</button>
+                            </span>
+                        </div>
+                        <button type="button" class="clear-btn" onclick="deleteStudent('${name}')">🗑️ 刪除此學生</button>
+                    </div>
                 </div>
             `);
         });
@@ -598,6 +616,78 @@ async function renderStudentDbPanel() {
         listEl.innerHTML = '<p class="no-data-hint">讀取失敗，請重新整理再試一次</p>';
     }
 }
+
+// 點姓名展開/收合堂數區塊（一次只展開一個，避免畫面太亂）
+window.toggleStudentDetail = function (name) {
+    const detail = document.getElementById(`detail-${name}`);
+    if (!detail) return;
+    document.querySelectorAll('.db-detail').forEach((el) => {
+        if (el !== detail) el.classList.add('hide');
+    });
+    detail.classList.toggle('hide');
+};
+
+// 用 +/－ 按鈕調整剩餘堂數，範圍限制在 0 ~ 總堂數之間
+window.adjustSession = async function (name, delta) {
+    try {
+        const ref = doc(db, "students", name);
+        const snap = await getDoc(ref);
+        const data = snap.exists() ? snap.data() : {};
+        const total = data.totalSessions !== undefined ? data.totalSessions : 10;
+        let remaining = data.remainingSessions !== undefined ? data.remainingSessions : 10;
+
+        remaining = Math.max(0, Math.min(total, remaining + delta));
+
+        await setDoc(ref, { totalSessions: total, remainingSessions: remaining }, { merge: true });
+
+        const remainEl = document.getElementById(`remain-${name}`);
+        if (remainEl) remainEl.innerText = remaining;
+    } catch (err) {
+        console.error("更新堂數失敗:", err);
+        alert("更新失敗，請重新整理再試一次");
+    }
+};
+
+// 新增學生：只需要姓名，堂數預設 10/10，之後學生自己註冊時 Email 會自動補上去
+window.addStudent = async function () {
+    const nameInput = prompt("請輸入學生姓名：");
+    if (!nameInput || !nameInput.trim()) return;
+    const name = nameInput.trim();
+
+    try {
+        const ref = doc(db, "students", name);
+        const existing = await getDoc(ref);
+        if (existing.exists()) {
+            alert("這個姓名已經存在學生名單裡了，如果是同一位學生，不需要重複新增");
+            return;
+        }
+
+        await setDoc(ref, { totalSessions: 10, remainingSessions: 10 }, { merge: true });
+        alert(`✅ 已新增學生：${name}`);
+        renderStudentDbPanel();
+    } catch (err) {
+        console.error("新增學生失敗:", err);
+        alert("新增失敗，請稍後再試");
+    }
+};
+
+// 刪除學生：只會刪除 students collection 裡的對照資料，不會動到已經排好的課程紀錄
+window.deleteStudent = async function (name) {
+    const sure = confirm(
+        `確定要刪除學生「${name}」嗎？\n\n這只會刪除他的帳號對照資料與堂數紀錄，不會刪除他已經排過的課程（如果要清課表要另外手動刪除）。`
+    );
+    if (!sure) return;
+
+    try {
+        await deleteDoc(doc(db, "students", name));
+        alert(`已刪除學生：${name}`);
+        renderStudentDbPanel();
+    } catch (err) {
+        console.error("刪除學生失敗:", err);
+        alert("刪除失敗，請稍後再試");
+    }
+};
+// ▲▲▲ 修改結束 ▲▲▲
 
 document.addEventListener('DOMContentLoaded', () => {
     const navBtns = document.querySelectorAll('.coach-nav-btn');

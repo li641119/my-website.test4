@@ -139,7 +139,10 @@
         <!-- ▼▼▼ 新增：學生資料庫畫面（目前先顯示姓名/Email/預設學費，之後課程包做好可以加剩餘堂數） ▼▼▼ -->
         <div class="coach-panel" id="panel-students" data-panel-id="panel-students">
             <div class="panel-inner">
-                <h2 class="panel-title">學生資料庫</h2>
+                <div class="panel-header-row">
+                    <h2 class="panel-title">學生資料庫</h2>
+                    <button type="button" class="add-student-btn" onclick="addStudent()">＋ 新增學生</button>
+                </div>
                 <div id="student-db-list">
                     <p class="no-data-hint">讀取中...</p>
                 </div>
