@@ -107,7 +107,16 @@ if (registerForm) {
             // ⚠️ 非常重要：這裡填的姓名，必須跟教練排課時在「行程名稱」欄位打的
             // 學生姓名「一字不差」完全一樣（包含空白、全形半形），
             // 否則系統會找不到對應的課程。
-            await setDoc(doc(db, "students", name), { email: email }, { merge: true });
+            const existingSnap = await getDoc(doc(db, "students", name));
+            const existingData = existingSnap.exists() ? existingSnap.data() : {};
+            const patch = { email: email };
+            // ▼▼▼ 新增：如果教練還沒幫這個學生設定過堂數，註冊時順便補上預設值 10/10 ▼▼▼
+            if (existingData.totalSessions === undefined) {
+                patch.totalSessions = 10;
+                patch.remainingSessions = 10;
+            }
+            // ▲▲▲ 新增結束 ▲▲▲
+            await setDoc(doc(db, "students", name), patch, { merge: true });
 
             // 註冊成功後，Firebase 預設會自動登入，
             // 這裡改成主動登出，跳出成功提醒，清空表單並切回登入分頁，
@@ -406,9 +415,18 @@ function startLiveSync() {
 // ▼▼▼ 新增：時間到自動扣課堂數
 // 規則：只要「教球」課程排定的下課時間已經過了，不論實際有沒有上課、
 // 或學生臨時請假，一律照扣一堂。只會在教練登入的瀏覽器裡執行。
+//
+// ⚠️ 生效日期：2027-01-01 之前完全不執行扣款，避免把過去已經上完、
+// 從來沒設計要扣款的舊課程也一起算進去，導致堂數變成一大堆負數。
 // ------------------------------------------------------------
+const DEDUCTION_START_DATE = new Date('2027-01-01T00:00:00');
+
 async function checkAndDeductPastSessions(events) {
     const now = new Date();
+    if (now < DEDUCTION_START_DATE) {
+        // 還沒到生效日期，完全不檢查、不扣款
+        return;
+    }
 
     for (const course of events) {
         if (!course || course.type !== 'work' || !course.name || !course.end) continue;
@@ -432,6 +450,7 @@ async function deductOneTimeCourse(course, now) {
 
     const classEndDateTime = new Date(`${course.date}T${course.end}:00`);
     if (isNaN(classEndDateTime.getTime()) || classEndDateTime >= now) return; // 時間格式異常或還沒到
+    if (classEndDateTime < DEDUCTION_START_DATE) return; // 早於扣款生效日期，不扣
 
     await deductOneSession(course.name);
 
@@ -451,6 +470,10 @@ async function deductRepeatingCourse(course, now) {
     const newlyDeducted = [];
     let cursor = new Date(now);
     cursor.setDate(cursor.getDate() - 60); // 只往回追 60 天，避免無限往前查
+    // 【新增】不管往回推 60 天算出來是哪一天，都不能早於扣款生效日期
+    if (cursor < DEDUCTION_START_DATE) {
+        cursor = new Date(DEDUCTION_START_DATE);
+    }
 
     while (cursor <= now) {
         if (cursor.getDay() === targetDay) {
@@ -600,16 +623,24 @@ window.uploadEvent = async (eventData) => {
         if (eventData.type === 'work') {
             const studentRef = doc(db, "students", eventData.name); // 假設文件 ID 就是姓名
             const studentSnap = await getDoc(studentRef);
+            const existingData = studentSnap.exists() ? studentSnap.data() : {};
 
-            if (studentSnap.exists() && studentSnap.data().email) {
-                emailToUpload = studentSnap.data().email;
+            if (existingData.email) {
+                emailToUpload = existingData.email;
             } else {
                 console.warn(`⚠️ 找不到學生 [${eventData.name}] 的對照 Email，已自動預設為空字串。`);
             }
 
-            await setDoc(studentRef, {
-                defaultPrice: currentPrice
-            }, { merge: true });
+            const patch = { defaultPrice: currentPrice };
+            // ▼▼▼ 新增：如果這個學生還沒有堂數欄位，補上預設值 10/10，
+            // 順便當作「這是真的學生」的標記，讓學生資料庫的清單可以用這個欄位過濾掉雜訊 ▼▼▼
+            if (existingData.totalSessions === undefined) {
+                patch.totalSessions = 10;
+                patch.remainingSessions = 10;
+            }
+            // ▲▲▲ 新增結束 ▲▲▲
+
+            await setDoc(studentRef, patch, { merge: true });
             console.log(`🚀 雲端已記憶 ${eventData.name} 的預設學費為: ${currentPrice} 元`);
         }
         // ▲▲▲ 修正結束 ▲▲▲
@@ -711,6 +742,21 @@ async function renderStudentDbPanel() {
         snap.forEach((docSnap) => {
             const data = docSnap.data();
             const name = docSnap.id;
+
+            // ▼▼▼ 新增：過濾掉污染資料。
+            // 真正的學生一定符合這兩個條件其中之一：
+            //   1. totalSessions 有值（曾經被排過教球課程，或被手動新增/自動扣款過）
+            //   2. email 有值（曾經註冊過帳號）
+            // 「上課」「其他」這種私人行程誤存進來的資料，兩者都不會有，會被擋掉。
+            // ⚠️ 例外：如果是「這次修正上線之前」就已經排過教球課、但從來沒被
+            // 編輯/重新儲存過的舊學生，暫時也會被這個過濾器擋住（因為還沒被補上
+            // totalSessions 欄位）。之後只要教練點開他任何一堂課存檔一次，
+            // 或用「＋新增學生」用同樣名字加一次，就會自動補上、重新出現在清單裡。
+            if (data.totalSessions === undefined && !data.email) {
+                return;
+            }
+            // ▲▲▲ 新增結束 ▲▲▲
+
             const emailText = data.email ? data.email : '（尚未註冊帳號）';
             const priceText = data.defaultPrice !== undefined ? `$${data.defaultPrice}` : '—';
             // 【新增】堂數：如果 Firestore 裡還沒有這個欄位，預設顯示 10/10
@@ -737,6 +783,10 @@ async function renderStudentDbPanel() {
                 </div>
             `);
         });
+        if (rows.length === 0) {
+            listEl.innerHTML = '<p class="no-data-hint">目前還沒有學生資料，點右上角「＋ 新增學生」開始建立</p>';
+            return;
+        }
         listEl.innerHTML = rows.join('');
     } catch (err) {
         console.error("讀取學生資料庫失敗:", err);
