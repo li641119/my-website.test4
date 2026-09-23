@@ -421,6 +421,13 @@ function startLiveSync() {
 // ------------------------------------------------------------
 const DEDUCTION_START_DATE = new Date('2027-01-01T00:00:00');
 
+// ▼▼▼ 新增：執行中鎖。Firestore 的 onSnapshot 只要 events collection
+// 裡任何一筆資料變動，就會整批重新觸發一次檢查；如果動作密集（例如連續
+// 編輯好幾堂課），前一次扣款的「已標記」還沒寫回 Firestore、下一次檢查
+// 就會誤判成沒扣過、重複再扣一次。這個鎖確保同一時間只有一個檢查在跑。
+let isDeductionRunning = false;
+// ▲▲▲ 新增結束 ▲▲▲
+
 async function checkAndDeductPastSessions(events) {
     const now = new Date();
     if (now < DEDUCTION_START_DATE) {
@@ -428,18 +435,32 @@ async function checkAndDeductPastSessions(events) {
         return;
     }
 
-    for (const course of events) {
-        if (!course || course.type !== 'work' || !course.name || !course.end) continue;
+    // ▼▼▼ 新增：如果上一輪檢查還沒跑完，這次直接跳過 ▼▼▼
+    if (isDeductionRunning) {
+        console.log("⏳ 扣款檢查已經在執行中，跳過這次重複觸發");
+        return;
+    }
+    isDeductionRunning = true;
+    // ▲▲▲ 新增結束 ▲▲▲
 
-        try {
-            if (course.isRepeating) {
-                await deductRepeatingCourse(course, now);
-            } else {
-                await deductOneTimeCourse(course, now);
+    try {
+        for (const course of events) {
+            if (!course || course.type !== 'work' || !course.name || !course.end) continue;
+
+            try {
+                if (course.isRepeating) {
+                    await deductRepeatingCourse(course, now);
+                } else {
+                    await deductOneTimeCourse(course, now);
+                }
+            } catch (err) {
+                console.error(`檢查課程 [${course.name}] 的扣款狀態時發生錯誤:`, err);
             }
-        } catch (err) {
-            console.error(`檢查課程 [${course.name}] 的扣款狀態時發生錯誤:`, err);
         }
+    } finally {
+        // ▼▼▼ 新增：不管成功或失敗，跑完都要把鎖放開 ▼▼▼
+        isDeductionRunning = false;
+        // ▲▲▲ 新增結束 ▲▲▲
     }
 }
 
@@ -778,7 +799,10 @@ async function renderStudentDbPanel() {
                                 <button type="button" onclick="adjustSession('${name}', 1)">＋</button>
                             </span>
                         </div>
-                        <button type="button" class="clear-btn" onclick="deleteStudent('${name}')">🗑️ 刪除此學生</button>
+                        <div class="db-detail-actions">
+                            <button type="button" class="clear-btn secondary" onclick="setSessionCount('${name}')">✏️ 直接修正堂數</button>
+                            <button type="button" class="clear-btn" onclick="deleteStudent('${name}')">🗑️ 刪除此學生</button>
+                        </div>
                     </div>
                 </div>
             `);
@@ -824,6 +848,41 @@ window.adjustSession = async function (name, delta) {
         alert("更新失敗，請重新整理再試一次");
     }
 };
+
+// ▼▼▼ 新增：直接輸入正確的堂數（不設範圍限制），
+// 專門用來修正被 bug 扣壞掉的數字（例如 -800），不用一直按 + 按到手痠
+window.setSessionCount = async function (name) {
+    try {
+        const ref = doc(db, "students", name);
+        const snap = await getDoc(ref);
+        const data = snap.exists() ? snap.data() : {};
+        const currentTotal = data.totalSessions !== undefined ? data.totalSessions : 10;
+        const currentRemaining = data.remainingSessions !== undefined ? data.remainingSessions : 10;
+
+        const newTotalInput = prompt(`[${name}] 總堂數（例如買了幾堂）：`, currentTotal);
+        if (newTotalInput === null) return; // 按取消
+        const newTotal = parseInt(newTotalInput, 10);
+        if (isNaN(newTotal)) { alert("請輸入數字"); return; }
+
+        const newRemainingInput = prompt(`[${name}] 剩餘堂數：`, currentRemaining);
+        if (newRemainingInput === null) return;
+        const newRemaining = parseInt(newRemainingInput, 10);
+        if (isNaN(newRemaining)) { alert("請輸入數字"); return; }
+
+        await setDoc(ref, { totalSessions: newTotal, remainingSessions: newRemaining }, { merge: true });
+
+        const remainEl = document.getElementById(`remain-${name}`);
+        const totalEl = document.getElementById(`total-${name}`);
+        if (remainEl) remainEl.innerText = newRemaining;
+        if (totalEl) totalEl.innerText = newTotal;
+
+        alert(`✅ 已將 [${name}] 的堂數修正為 ${newRemaining} / ${newTotal}`);
+    } catch (err) {
+        console.error("修正堂數失敗:", err);
+        alert("修正失敗，請重新整理再試一次");
+    }
+};
+// ▲▲▲ 新增結束 ▲▲▲
 
 // 新增學生：只需要姓名，堂數預設 10/10，之後學生自己註冊時 Email 會自動補上去
 window.addStudent = async function () {
