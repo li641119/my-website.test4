@@ -1,1264 +1,837 @@
-:root {
-    --unit-height: 6px;
-    --hour-height: 36px;
-    --work-bg: #e3f2fd;
-    --work-border: #2196f3;
-    --school-bg: #f3e5f5;
-    --school-border: #9c27b0;
+// --- 全域變數 ---
+import { currentUser } from './app.js';
+let courses = [];
+let viewDate = new Date(); 
+let editingId = null; // 【編輯功能關鍵】用於追蹤正在編輯的行程 ID
+
+const presetColors = [
+    '#c2bcbc', '#b5e3db', '#d5e3c7', '#efe78e', '#fad595', 
+    '#ffc0c7', '#f5c5ff', '#b2ceff', '#c4cbff'
+];
+
+// 在 cal-gemini.js 中
+window.updateCalendarUI = function(cloudEvents) {
+    try {
+        console.log("📥 [updateCalendarUI] 收到雲端資料，數量：", cloudEvents ? cloudEvents.length : 0);
+        
+        if (!cloudEvents) return;
+
+        // 🚀【防禦 1】：確保全域變數 window.courses 與本地 courses 都成功拿到資料
+        window.courses = cloudEvents;
+        if (typeof courses !== 'undefined') {
+            courses = cloudEvents;
+        }
+
+        // 🚀【防禦 2】：檢查畫面的日期就緒了沒，沒就緒就先刷一次日期
+        const testHeader = document.querySelector('.day-header');
+        if (!testHeader || !testHeader.dataset || !testHeader.dataset.fullDate) {
+            console.log("📅 日期資料尚未注入 DOM，正在嘗試呼叫 updateWeekDates...");
+            if (typeof updateWeekDates === 'function') {
+                updateWeekDates(); 
+            }
+        }
+        
+        // 🚀【防禦 3】：執行渲染，並用超安全的邏輯包覆
+        if (typeof renderAll === 'function') {
+            renderAll(); 
+        } else {
+            console.error("❌ 錯誤：在 window 中找不到 renderAll 函式！");
+        }
+        
+    } catch (error) {
+        console.error("❌ [updateCalendarUI] 核心同步程序發生崩潰:", error);
+    }
+};
+
+// --- 1. 初始化 ---
+document.addEventListener('DOMContentLoaded', () => {
+    updateWeekDates();
+    loadData();
     
-     --lc-green: #1B4B43;
-    --lc-green-dark: #0F2E29;
-    --lc-orange: #C9622A;
-    --lc-ink: #16211E;
-    --lc-ink-soft: #5B6B67;
-    --lc-line: #DDD8CB;
-}
-
-body { 
-    font-family: "Microsoft JhengHei", sans-serif; 
-    background: #f8f9fa;
-    margin: 0; 
-    color: #333; 
-}
-
-.main-wrapper { 
-    display: flex; 
-    padding: 20px; 
-    gap: 20px; 
-    min-height: 100vh; }
-
-/* 側邊欄 */
-.sidebar { 
-    width: 230px; 
-    background: white; 
-    padding: 20px; 
-    border-radius: 12px; 
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    display: flex;
-    flex-direction: column;
-}
-
-.sidebar-title {
-    text-align: center;
-    font-size: 18px;
-    font-weight: 700;
-    margin-bottom: 12px;
-    color: #2c3e50;
-}
-
-.no-data-hint {
-    color: #7f8c8d;
-    text-align: center;
-    margin-top: 20px;
-    font-size: 14px;
-}
-
-#monthly-stats {
-    flex-grow: 1;
-    overflow-y: auto;
-    margin-bottom: 20px;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.no-record-tip {
-    color: #888;
-    text-align: center;
-    margin-top: 20px;
-}
-
-#monthly-stats::-webkit-scrollbar {
-    width: 5px;
-}
-
-#monthly-stats::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
-}
-#monthly-stats::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-}
-
-input[type="color"]::-webkit-color-swatch-wrapper {padding: 0;}
-input[type="color"]::-webkit-color-swatch {border: none;border-radius: 50%;}
-input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
-
-.stat-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 10px;
-    margin-bottom: 5px;
-    background: #fff;
-    border-radius: 6px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
-    width: 100%;
-    box-sizing: border-box;
-    justify-content: space-between; 
-}
-
-.stat-item .student-name {
-    flex-grow: 1;
-    font-weight: 600;
-    color: #333;
-    font-size: 15px;
-}
-
-.stat-item .info-right {
-    text-align: right;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.stat-item .info-right strong {
-    color: #2c3e50;
-    font-size: 15px;
-}
-
-.stat-item .info-right .unit {
-    font-size: 11px;
-    font-weight: normal;
-    color: #7f8c8d;
-}
-
-.stat-item .info-right .income {
-    font-size: 12px;
-    color: #098579;
-    font-weight: bold;
-    margin-top: 2px;
-}
-
-.stat-item input[type="color"] {
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-    width: 18px;
-    height: 18px;
-    background-color: transparent;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    border-radius: 50%;
-    overflow: hidden;
-    flex-shrink: 0;
-    --round: 50%;
-}
-
-.stat-item input[type="color"]::-webkit-color-swatch-wrapper {
-    padding: 0;
-}
-.stat-item input[type="color"]::-webkit-color-swatch {
-    border: 1px solid #fff;
-    box-shadow: 0 0 4px rgba(0,0,0,0.2);
-    border-radius: 50%;
-}
-
-.clear-btn { 
-    width: 100%; 
-    padding: 10px; 
-    background: #ffebee; 
-    color: #c62828; 
-    border: 1px solid #ffcdd2; 
-    cursor: pointer; 
-    border-radius: 6px; 
-    margin-top: 10px; 
-    font-weight: bold; 
-    transition: background 0.2s;
-}
-
-.clear-btn:hover { background: #ffeaea; }
-.clear-btn.secondary { background: #fff3e0; color: #e65100; border-color: #ffe0b2; }
-.clear-btn.secondary:hover { background: #fff0db; }
-
-.stats-summary{ 
-    background: #f8f9fa; 
-    padding: 5px; 
-    border-radius: 8px; 
-    margin-top: auto;
-}
-
-.stats-footer {
-    background: transparent;
-    padding: 0;
-    border-radius: 0;
-    margin-bottom: 15px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.stats-footer p {
-    margin: 0;
-    background: #ffffff;
-    border: 1px solid #eaedf1;
-    padding: 12px 14px;
-    border-radius: 10px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 14px;
-    color: #546e7a;
-    font-weight: 500;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.02);
-    transition: all 0.2s ease;
-}
-
-.stats-footer p:hover {
-    border-color: #cfd8dc;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.04);
-}
-
-.stats-footer span {
-    font-size: 14px;
-    font-weight: 700;
-    color: #2c3e50;
-    font-variant-numeric: tabular-nums;
-}
-
-.income-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-}
-
-#month-income {
-    color: #2e7d32;
-    font-size: 15px;
-}
-
-.toggle-income-btn {
-    background: #f1f3f4;
-    border: none;
-    color: #455a64;
-    cursor: pointer;
-    font-size: 11px;
-    font-weight: bold;
-    padding: 4px 8px;
-    border-radius: 6px;
-    transition: all 0.2s ease;
-    display: inline-flex;
-    align-items: center;
-}
-
-.toggle-income-btn:hover {
-    background: #2c3e50;
-    color: #ffffff;
-}
-
-.income-amount {
-    font-weight: 700;
-    filter: blur(5px);
-    transition: filter 0.2s ease-in-out;
-    user-select: none;
-    display: inline-block;
-}
-
-.income-amount.revealed {
-    filter: blur(0);
-    user-select: auto;
-}
-
-
-/* --- 學生視角專屬樣式 --- */
-#student-view {
-    flex-grow: 1;
-    width: 100%;
-}
-
-.student-header {
-    background: white;
-    padding: 20px;
-    border-radius: 12px;
-    margin-bottom: 20px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-}
-
-.student-stats-row {
-    display: flex;
-    gap: 15px;
-    margin-top: 15px;
-}
-
-.student-stat-card {
-    background: #e3f2fd;
-    border: 1px solid #bbdefb;
-    padding: 15px 20px;
-    border-radius: 10px;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-}
-
-.student-stat-card .label { font-size: 13px; color: #546e7a; margin-bottom: 5px; }
-.student-stat-card .stat-value { font-size: 24px; font-weight: bold; color: #1565c0; }
-
-/* 行事曆核心 */
-.calendar-container { 
-    flex-grow: 1; 
-    background: white; 
-    padding: 15px; 
-    border-radius: 12px; 
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
- }
-
-.calendar-event-card {
-    position: relative;
-}
-
-.duplicate-badge {
-    position: absolute;
-    bottom: 4px;
-    right: 4px;
-    background-color: #ef4444;
-    color: #ffffff;
-    font-size: 11px;
-    font-weight: bold;
-    padding: 2px 6px;
-    border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    pointer-events: none;
-}
-
-.is-duplicate {
-    border: 2px solid #ef4444 !important;
-}
-
-.schedule-grid { 
-    display: grid; 
-    grid-template-columns: 70px repeat(7, 1fr); 
-    grid-template-rows: 40px repeat(84, var(--unit-height)); 
-    border: 1px solid #eee; 
-    position: relative; 
-    overflow-y: auto; 
-    background: #fff;
-}
-.day-header {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    background: #2c3e50;
-    color: white;
-    text-align: center;
-    padding: 5px;
-    font-size: 12px;
-    line-height: 1.0;
-}
-
-.date-label {
-    font-size: 12px;
-    font-weight: 700;
-    opacity: 0.9;
-    margin-right: 5px;
-    display: block;
-}
-
-.time-column { 
-    grid-row: 2 / span 84; 
-    display: flex; 
-    flex-direction: column; 
-    justify-content: center; 
-    border-right: 1px solid #ddd; 
-    font-size: 12px; 
-    color: #78909c; 
-    text-align: center; 
-}
-.time-column div { 
-    height: calc(var(--unit-height)*6);
-    font-size: 12px; 
-    text-align: center; 
-    color: #777; 
-    box-sizing: border-box;
-    display: flex; 
-    align-items: center; 
-    justify-content: center;
-}
-
-.placed-event {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 2px 4px;
-    font-size: 12px;
-    overflow: hidden;
-    line-height: 1.7;
-    border-radius: 4px;
-    color: white !important;
-    transition: all 0.2s;
-    z-index: 10;
-    position: relative;
-    border: 1px solid rgba(255,255,255,0.2);
-    box-sizing: border-box; 
-
-}
-
-.placed-event strong {
-    display: block;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.placed-event span {
-    font-size: 11px;
-    opacity: 0.9;
-    white-space: nowrap;
-}
-
-@container (max-height: 50px) {
-    .placed-event {
-        flex-direction: row;
-        align-items: center;
-        gap: 5px;
+    // 監聽點擊空白處新增
+    const dropzone = document.getElementById('dropzone');
+    if (dropzone) {
+        dropzone.addEventListener('click', (e) => {
+            if (e.target.id === 'dropzone' || e.target.classList.contains('grid-lines')) {
+                openModal(); // 新增模式
+            }
+        });
     }
-    .placed-event span {
-        display: none;
+
+    const nameInput = document.getElementById('m-name');
+    if (nameInput) {
+        nameInput.addEventListener('blur', function() {
+            const name = this.value.trim();
+            const currentCourses = window.courses || courses || [];
+            
+            // 從既有課表中，由新到舊尋找這名學生的歷史紀錄
+            const lastCourse = [...currentCourses].reverse().find(c => c.name === name && c.price);
+            
+            if (lastCourse) {
+                if (lastCourse.color) setupColorPalette(lastCourse.color);
+                
+                // 如果教練還沒打金額，自動幫教練填入他上一次的學費
+                const priceInput = document.getElementById('m-price');
+                if (priceInput && priceInput.value === "" && lastCourse.price) {
+                    priceInput.value = lastCourse.price;
+                    console.log(`🎯 自動帶入 ${name} 的歷史學費: ${lastCourse.price} 元`);
+                }
+            }
+        });
+    }
+});
+
+// --- 2. 彈窗控制 (整合編輯模式) ---
+function openModal(isEdit = false, courseData = null) { 
+    const modal = document.getElementById('eventModal');
+    if (!modal) return;
+    const submitBtn = modal.querySelector('button[onclick="saveFromModal()"]');
+    editingId = isEdit ? courseData.id : null; // 設定目前是否為編輯模式
+
+    modal.style.display = 'block'; 
+
+    const list = document.getElementById('student-list') || createStudentList();
+    const currentCourses = window.courses || courses || [];
+    const names = [...new Set(currentCourses.map(c => c.name))];
+    list.innerHTML = names.map(n => `<option value="${n}">`).join('');
+
+    if (isEdit && courseData) {
+        // --- 編輯模式：填入舊資料 ---
+        document.getElementById('m-name').value = courseData.name || "";
+        document.getElementById('m-price').value = courseData.price !== undefined ? courseData.price : "";
+        
+        // 地點判斷
+        const isStandardLoc = ["中正高中", "秀峰高中"].includes(courseData.loc);
+        document.getElementById('m-loc').value = isStandardLoc ? courseData.loc : "CUSTOM";
+        if (!isStandardLoc) {
+            document.getElementById('m-loc-custom').value = courseData.loc || "";
+            document.getElementById('m-loc-custom').style.display = 'block';
+        } else {
+            document.getElementById('m-loc-custom').style.display = 'none';
+        }
+        
+        document.getElementById('m-day').value = courseData.day;
+        document.getElementById('m-type').value = courseData.type;
+        document.getElementById('m-start').value = courseData.start;
+        document.getElementById('m-end').value = courseData.end;
+        document.getElementById('m-repeat').checked = courseData.isRepeating;
+        setupColorPalette(courseData.color);
+        if (submitBtn) submitBtn.innerText = "更新行程"; // 改變按鈕文字
+    } else {
+        // --- 新增模式：重置欄位 ---
+        document.getElementById('m-name').value = "";
+        document.getElementById('m-price').value = "";
+        document.getElementById('m-loc-custom').value = "";
+        document.getElementById('m-loc-custom').style.display = 'none';
+        document.getElementById('m-repeat').checked = false;
+        if (submitBtn) submitBtn.innerText = "儲存行程";
+        setupColorPalette(); 
     }
 }
 
-.placed-event:hover {
-    z-index: 100 !important;
-    transform: scale(1.02);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-    min-height: fit-content;
-}
-.event-work { 
-    background: var(--work-bg); 
-    border-left: 4px solid var(--work-border); 
-    color: #0d47a1; 
-    font-size: 10px;
-}
-
-.grid-lines { 
-    grid-column: 2 / span 7; 
-    grid-row: 2 / span 84; 
-    background-image: linear-gradient(#f0f0f0 1px, transparent 1px); 
-    background-size: 100% calc(var(--unit-height)*6); pointer-events: none;z-index: 1; }
-
-    .hide {
-    display: none !important;
-}
-
-.flex-center {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 20px;
-    margin-bottom: 10px;
-}
-
-.calendar-title {
-    text-align: center;
-    margin: 5px;
-    font-weight: 700;
-}
-
-.custom-loc-input {
-    display: none;
-    margin-top: 5px;
-}
-
-.repeat-checkbox-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 12px 0;
-    cursor: pointer;
-    background: #f0f7ff;
-    padding: 10px;
-    border-radius: 8px;
-    box-sizing: border-box;
-    transition: background 0.2s;
-}
-
-.repeat-checkbox-wrapper:hover {
-    background: #e1f0ff;
-}
-
-.repeat-checkbox-wrapper input[type="checkbox"] {
-    width: 18px !important;
-    height: 18px !important;
-    margin: 0;
-    cursor: pointer;
-}
-
-.repeat-text {
-    font-size: 14px;
-    color: #2c3e50;
-    font-weight: bold;
-}
-
-/* 彈窗 */
-#eventModal { 
-    display: none; 
-    position: fixed; 
-    z-index: 1000; 
-    left: 0; 
-    top: 0; 
-    width: 100%; 
-    height: 100%; 
-    background: rgba(0,0,0,0.55);
-    overflow-y: auto; 
-    -webkit-overflow-scrolling: touch;
-    padding: 30px 0;
-    box-sizing: border-box;
-}
-
-.modal-content {
-    background-color: #fefefe;
-    margin: 0 auto;
-    padding: 15px;
-    border-radius: 16px;
-    width: 90%; 
-    max-width: 450px;
-    position: relative;
-    box-sizing: border-box;
-    word-wrap: break-word;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
-}
-
-.modal-content label { 
-    display: block; 
-    margin: 14px 0 6px 2px; 
-    font-weight: bold; 
-    font-size: 14px; 
-    color: #2c3e50;
-}
-
-.modal-content input, .modal-content select { 
-    width: 100%; 
-    padding: 10px 12px; 
-    border: 1px solid #ddd; 
-    border-radius: 10px; 
-    font-size: 14px;
-    color: #333;
-    background-color: #fff;
-    box-sizing: border-box; 
-}
-
-.modal-content input[type="checkbox"] {
-    width: auto;
-    margin-right: 8px;
-    cursor: pointer;
-}
-
-.time-row { 
-    display: flex; 
-    gap: 25px;
-}
-
-.price-row {
-    margin-bottom: 8px;
-}
-
-.price-input-wrapper {
-    position: relative;
-    display: flex;
-    align-items: center;
-    width: 100%;
-}
-
-.price-input-wrapper input[type="number"] {
-    width: 100%;
-    padding: 10px 40px 10px 12px;
-    border: 1px solid #ddd;
-    border-radius: 10px;
-    font-size: 14px;
-    font-variant-numeric: tabular-nums;
-    box-sizing: border-box;
-}
-
-.price-input-wrapper input[type="number"]:focus {
-    border-color: #098579;
-    outline: none;
-}
-
-.currency-unit {
-    position: absolute;
-    right: 14px;
-    color: #78909c;
-    font-size: 14px;
-    font-weight: bold;
-    pointer-events: none;
-}
-
-.price-input-wrapper input[type="number"]::-webkit-outer-spin-button,
-.price-input-wrapper input[type="number"]::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-}
-
-/* 彈窗底部的按鈕容器 */
-.modal-buttons {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    margin-top: 24px;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.modal-buttons button {
-    flex: 1;
-    max-width: 120px;
-    padding: 10px 16px;
-    font-size: 14px;
-    font-weight: 600;
-    border-radius: 8px;
-    border: none;
-    cursor: pointer;
-    transition: background 0.2s;
-}
-
-.modal-buttons .btn-save {
-    background-color: #098579;
-    color: white;
-    box-shadow: 0 2px 4px rgba(9, 133, 121, 0.2);
-}
-.modal-buttons .btn-save:hover {
-    background-color: #076b61;
-}
-
-.modal-buttons .btn-cancel {
-    background-color: #e0e0e0;
-    color: #333;
-}
-.modal-buttons .btn-cancel:hover {
-    background-color: #d5d5d5;
-}
-
-/* 右下角懸浮控制區 */
-.floating-controls {
-    position: fixed;
-    bottom: 30px;
-    right: 30px;
-    display: flex;
-    gap: 10px;
-    z-index: 1000;
-}
-
-.floating-controls button {
-    padding: 12px 18px;
-    border-radius: 50px;
-    border: none;
-    background-color: #ffffff;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-    cursor: pointer;
-    font-size: 16px;
-    transition: all 0.2s ease;
-    border: 1px solid #eee;
-}
-
-.floating-controls button:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
-    background-color: #f8f9fa;
-}
-
-.floating-controls .today-btn {
-    background-color: #2c3e50;
-    color: white;
-    font-weight: bold;
-    font-size: 14px;
-}
-
-.floating-controls .today-btn:hover {
-    background-color: #34495e;
-}
-
-.color-circle {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    cursor: pointer;
-    border: 2px solid transparent;
-    transition: transform 0.2s, border-color 0.2s;
-}
-
-.color-circle:hover {
-    transform: scale(1.2);
-}
-
-.color-circle.active {
-    border-color: #333;
-    transform: scale(1.1);
-    box-shadow: 0 0 5px rgba(0,0,0,0.3);
-}
-
-/* 登入介面專用樣式 */
-#login-container {
-    position: fixed;
-    top: 0; 
-    left: 0;
-    right: 0;
-    bottom: 0;
-    width: 100%; 
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 9999;
-    padding: 24px;
-    box-sizing: border-box;
-    font-family: 'Inter', "Microsoft JhengHei", sans-serif;
-    background:
-        radial-gradient(circle at 15% 20%, rgba(255,255,255,0.05), transparent 40%),
-        linear-gradient(160deg, var(--lc-green) 0%, var(--lc-green-dark) 100%);
-}
-
-.auth-box {
-    background: white;
-    padding: 40px 36px 32px;
-    border-radius: 10px;
-    box-shadow: 0 20px 60px rgba(15, 46, 41, 0.35);
-    width: 100%;
-    max-width: 380px;
-    text-align: left;
-    box-sizing: border-box;
-}
-
-.auth-box h1 {
-    font-family: 'Archivo', "Microsoft JhengHei", sans-serif;
-    font-size: 22px;
-    font-weight: 800;
-    color: var(--lc-ink);
-    margin: 0 0 6px 0;
-}
- 
-.login-subtitle {
-    font-size: 13.5px;
-    color: var(--lc-ink-soft);
-    margin: 0 0 28px 0;
-}
-
-.auth-tabs {
-    display: flex;
-    gap: 24px;
-    border-bottom: 1.5px solid var(--lc-line);
-    margin-bottom: 24px;
-}
- 
-.auth-tab {
-    background: none;
-    border: none;
-    padding: 0 0 12px;
-    font-size: 14.5px;
-    font-weight: 600;
-    color: var(--lc-ink-soft);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1.5px;
-    transition: color 0.15s ease, border-color 0.15s ease;
-}
- 
-.auth-tab.active {
-    color: var(--lc-green);
-    border-bottom-color: var(--lc-orange);
-}
-
-#login-form,
-#register-form {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-}
-
-/* ▼▼▼ 修正問題1：登入畫面出現註冊欄位 ▼▼▼
-   原因：上面 #login-form, #register-form 是 ID 選擇器（優先權 100），
-   比 .auth-form-hidden 這個 class 選擇器（優先權 10）高。
-   即使 register-form 有 auth-form-hidden 這個 class，
-   display:flex 還是會贏過 display:none，導致註冊表單一直顯示。
-   加上 !important 蓋過去，跟你原本 .hide 的做法一致。 */
-.auth-form-hidden {
-    display: none !important;
-}
-/* ▲▲▲ 修正結束 ▲▲▲ */
-
-.field-label {
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--lc-ink);
-    margin-bottom: -6px;
-}
-
-.auth-box input {
-    width: 100%; 
-    padding: 11px 12px;
-    border: 1.5px solid var(--lc-line);
-    border-radius: 6px;
-    font-size: 14px;
-    background: #FBFAF7;
-    color: var(--lc-ink);
-    box-sizing: border-box;
-    transition: border-color 0.15s ease, background 0.15s ease;
-    margin-bottom: 0;
-}
-
-.auth-box input:focus {
-    outline: none;
-    border-color: var(--lc-green);
-    background: #fff;
-}
- 
-.auth-box input:focus-visible {
-    outline: 2px solid var(--lc-orange);
-    outline-offset: 1px;
-}
-
-.password-field {
-    position: relative;
-}
- 
-.password-field input {
-    padding-right: 44px;
-}
- 
-.toggle-pw {
-    position: absolute;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: none;
-    border: none;
-    font-size: 12px;
-    color: var(--lc-ink-soft);
-    cursor: pointer;
-    padding: 4px;
-}
-
-#login-error,
-#register-error {
-    color: #B23A2E;
-    background: #FBEAE7;
-    border-radius: 6px;
-    padding: 0;
-    min-height: 0;
-    font-size: 13px;
-    font-weight: 500;
-    text-align: left;
-}
-
-#login-error:not(:empty),
-#register-error:not(:empty) {
-    padding: 9px 11px;
-    margin-top: 4px;
-}
-
-/* ▼▼▼ 修正：原本這裡有兩組重複的 .login-btn（一組舊版藍色、一組新版綠色），
-   已經刪掉舊的那組，只留下這組會實際生效的樣式 ▼▼▼ */
-.login-btn {
-    width: 100%; 
-    padding: 12px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14.5px;
-    font-weight: 600;
-    margin-top: 8px;
-    background-color: var(--lc-green);
-    color: white;
-    transition: background-color 0.2s;
-}
-/* ▲▲▲ 修正結束 ▲▲▲ */
- 
-.login-btn:hover {
-    background-color: var(--lc-green-dark);
-}
-
-.login-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
- 
-.auth-footnote {
-    margin-top: 20px;
-    font-size: 12.5px;
-    color: var(--lc-ink-soft);
-    text-align: center;
-}
-
-/* ▼▼▼ 新增：右上角登出按鈕 ▼▼▼ */
-#logout-btn {
-    position: fixed;
-    top: 14px;
-    right: 14px;
-    z-index: 2000;
-    padding: 8px 16px;
-    border: none;
-    border-radius: 6px;
-    background: var(--lc-green-dark);
-    color: #EFEAE0;
-    font-family: "Microsoft JhengHei", sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-    transition: background 0.2s;
-}
-
-#logout-btn:hover {
-    background: #000;
-}
-/* ▲▲▲ 新增結束 ▲▲▲ */
-
-
-@media (max-width: 768px) {
-    .main-wrapper {
-        flex-direction: column;
-        padding: 10px;
-        gap: 10px;
+function createStudentList() {
+    let dl = document.getElementById('student-list');
+    if (!dl) {
+        dl = document.createElement('datalist');
+        dl.id = 'student-list';
+        document.body.appendChild(dl);
     }
+    const nameInput = document.getElementById('m-name');
+    if (nameInput) nameInput.setAttribute('list', 'student-list');
+    return dl;
+}
 
-    .sidebar {
-        width: 100%;
-        box-sizing: border-box;
-        order: 2;
-        padding: 15px;
+function closeModal() { 
+    const modal = document.getElementById('eventModal');
+    if (modal) modal.style.display = 'none'; 
+    editingId = null;
+}
+
+function setupColorPalette(selectedColor = presetColors[0]) {
+    const palette = document.getElementById('color-palette');
+    if (!palette) return;
+    palette.innerHTML = ''; 
+    presetColors.forEach(color => {
+        const btn = document.createElement('div');
+        btn.className = 'color-circle';
+        btn.style.backgroundColor = color;
+        if (color === selectedColor) btn.classList.add('active');
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            selectColor(color, btn);
+        };
+        palette.appendChild(btn);
+    });
+    const colorInput = document.getElementById('m-color');
+    if (colorInput) colorInput.value = selectedColor;
+}
+
+function selectColor(color, element) {
+    document.querySelectorAll('.color-circle').forEach(el => el.classList.remove('active'));
+    if (element) element.classList.add('active');
+    const colorInput = document.getElementById('m-color');
+    if (colorInput) colorInput.value = color;
+}
+
+// --- 3. 時間運算與儲存 ---
+function timeToRow(timeStr) {
+    if (!timeStr) return NaN;
+    const [hrs, mins] = timeStr.split(':').map(Number);
+    return 2 + (((hrs - 8) * 60 + mins) / 10);
+}
+
+function saveFromModal() {
+    const name = document.getElementById('m-name').value.trim();
+    const locSelect = document.getElementById('m-loc');
+    let loc = locSelect.value === 'CUSTOM' ? (document.getElementById('m-loc-custom').value.trim() || "自定義地點") : locSelect.value;
+    const day = document.getElementById('m-day').value;
+    const type = document.getElementById('m-type').value;
+    const start = document.getElementById('m-start').value;
+    const end = document.getElementById('m-end').value;
+    const isRepeating = document.getElementById('m-repeat').checked;
+    
+    // 優先抓取輸入框金額，若空則尋找該學生最近一次的歷史學費，最後才 fallback 600
+    const priceInputVal = document.getElementById('m-price').value;
+    let price = parseInt(priceInputVal, 10);
+
+    const currentCourses = window.courses || courses || [];
+
+    if (isNaN(price)) {
+        const lastCourseOfStudent = currentCourses.find(c => c.name === name && c.price);
+        price = lastCourseOfStudent ? parseInt(lastCourseOfStudent.price, 10) : 600;
     }
     
-    .student-stats-row { flex-direction: column; }
-    #monthly-stats {max-height: 200px;}
+    if (!name || !start || !end) return alert("請填寫完整資訊");
 
-    .calendar-container {
-        padding: 8px;
-        order: 1;
-        overflow-x: auto;
-    }
+    // 【修正 3】：優先拿色盤選擇的顏色，若無才 fallback 學生既有顏色或預設灰色
+    const selectedColorVal = document.getElementById('m-color')?.value;
+    const existingStudent = currentCourses.find(c => c.name === name && c.color);
+    const eventColor = selectedColorVal || (existingStudent ? existingStudent.color : '#c2bcbc'); 
+        
+    const startRow = timeToRow(start);
+    const endRow = timeToRow(end);
+    const duration = (endRow - startRow) * 10;
 
-    .schedule-grid {
-        grid-template-columns: 45px repeat(7, 120px);
-        min-width: 885px;
-    }
+    if (isNaN(startRow) || isNaN(endRow)) return;
 
-    .time-column {
-        position: sticky;
-        left: 0;
-        z-index: 25;
-        background: #fcfcfc;
-        font-size: 10px;
-    }
+    // 檢查衝突
+    const hasConflict = currentCourses.find(c => {
+        if (c.id.toString() === (editingId ? editingId.toString() : "")) return false; 
+        return c.day === day && (startRow < c.endRow && endRow > c.startRow);
+    });
+    if (hasConflict && !confirm(`⚠️ 時段與 [${hasConflict.name}] 衝突，確定要排入嗎？`)) return;
 
-    .day-header {
-        font-size: 11px;
-        position: sticky;
-        top: 0;
-        z-index: 20;
-    }
+    // 計算日期
+    const dayHeaders = document.querySelectorAll('.day-header');
+    const targetHeader = Array.from(dayHeaders).find(h => h.dataset.day === (day === "8" ? "0" : (parseInt(day)-1).toString()) );
+    const dateStr = targetHeader ? targetHeader.dataset.fullDate : new Date().toLocaleDateString('en-CA');
 
-    .placed-event {
-        padding: 1px 2px;
-        font-size: 10px;
-    }
+    const eventId = editingId ? editingId.toString() : Date.now().toString(); 
     
-    .placed-event strong {font-size: 11px;}
+    const editingCourse = editingId ? currentCourses.find(c => c.id.toString() === editingId.toString()) : null;
 
-    .floating-controls {
-        bottom: 20px;
-        right: 20px;
-        gap: 5px;
+    const courseData = { 
+        id: eventId, 
+        name, loc, day, type, 
+        startRow, endRow, 
+        start, end, 
+        duration, 
+        price,
+        date: dateStr, 
+        isRepeating, 
+        color: eventColor, 
+        exceptions: editingCourse && editingCourse.exceptions ? editingCourse.exceptions : []
+    };
+
+    console.log("📤 準備上傳:", courseData);
+
+    if (typeof window.uploadEvent === 'function') {
+        window.uploadEvent(courseData); // 呼叫 app.js 的功能
     }
 
-    .floating-controls button {
-        padding: 10px 14px;
-        font-size: 14px;
+    closeModal();
+}
+
+// --- 4. 核心渲染 (整合全月與本週統計) ---
+function calculateMonthlyData(targetYear, targetMonth) {
+    let totalMinutes = 0;
+    let totalIncome = 0; 
+    let studentStats = {};
+
+    const currentCourses = window.courses || courses || [];
+
+    currentCourses.forEach(course => {
+        if (!course || course.type !== 'work') return;
+
+        // 保底時薪判斷
+        const hourlyRate = course.price !== undefined ? Number(course.price) : 600;
+
+        if (course.isRepeating) {
+            let d = new Date(targetYear, targetMonth, 1);
+            while (d.getMonth() === targetMonth) {
+                const dDay = d.getDay();
+                const tDay = (course.day === "8" ? 0 : parseInt(course.day) - 1);
+                const dStr = d.toLocaleDateString('en-CA');
+
+                if (dDay === tDay && (!course.exceptions || !course.exceptions.includes(dStr))) {
+                    const duration = Number(course.duration || 0);
+                    const currentEventIncome = (duration / 60) * hourlyRate; 
+                    
+                    totalMinutes += duration;
+                    totalIncome += currentEventIncome;
+
+                    if (!studentStats[course.name]) {
+                        studentStats[course.name] = { mins: 0, money: 0 };
+                    }
+                    studentStats[course.name].mins += duration;
+                    studentStats[course.name].money += currentEventIncome;
+                }
+                d.setDate(d.getDate() + 1);
+            }
+        } else {
+            if (course.date) {
+                const p = course.date.split('-');
+                if (parseInt(p[0]) === targetYear && (parseInt(p[1]) - 1) === targetMonth) {
+                    const duration = Number(course.duration || 0);
+                    const currentEventIncome = (duration / 60) * hourlyRate; 
+
+                    totalMinutes += duration;
+                    totalIncome += currentEventIncome;
+
+                    if (!studentStats[course.name]) {
+                        studentStats[course.name] = { mins: 0, money: 0 };
+                    }
+                    studentStats[course.name].mins += duration;
+                    studentStats[course.name].money += currentEventIncome;
+                }
+            }
+        }
+    });
+    return { totalMinutes, totalIncome, studentStats };
+}
+
+window.updateStats = function() {
+    console.log("📊 [updateStats] 收到重新計算統計的請求");
+    renderAll();
+}
+
+// ------------------------------------------------------------
+// ▼▼▼ 新增：本月收入畫面的渲染函式
+// 直接沿用 calculateMonthlyData（跟側邊欄用的是同一份計算邏輯，數字一定會對得起來），
+// 只是把結果畫到新的「本月收入」畫面上，不是側邊欄。
+// 「本月」的定義跟側邊欄一致：以目前行事曆瀏覽到的那一週為準，不是今天的實際月份。
+// ------------------------------------------------------------
+export function renderIncomePanel() {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const monthData = calculateMonthlyData(year, month);
+
+    const hoursEl = document.getElementById('income-panel-total-hours');
+    if (hoursEl) hoursEl.innerText = `${(monthData.totalMinutes / 60).toFixed(1)} 小時`;
+
+    const incomeEl = document.getElementById('income-panel-total-income');
+    if (incomeEl) incomeEl.innerText = `$${Math.round(monthData.totalIncome).toLocaleString()}`;
+
+    const breakdownEl = document.getElementById('income-panel-breakdown');
+    if (!breakdownEl) return;
+
+    const entries = Object.entries(monthData.studentStats).sort((a, b) => b[1].money - a[1].money);
+    if (entries.length === 0) {
+        breakdownEl.innerHTML = '<p class="no-data-hint">本月尚無教球紀錄</p>';
+        return;
     }
 
-    /* ▼▼▼ 修正問題2：手機版新增行事曆彈窗，讓內容自己有捲動範圍、按鈕永遠按得到 ▼▼▼ */
-    .modal-content {
-        width: 92%;
-        /* 修改：margin 從 20% auto 改成 4vh auto。
-           20% 在手機上等於把彈窗往下推掉螢幕高度的 1/5，
-           內容一多，下面的按鈕就會被推出可視範圍外。 */
-        margin: 4vh auto;
-        padding: 18px;
-        /* 新增：限制彈窗最大高度為視窗的 88%，內容超過時彈窗自己捲動，
-           不再只依賴外層 #eventModal 的捲動（手機瀏覽器對 fixed + 100% 高度常有相容性問題）。 */
-        max-height: 88vh;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
+    breakdownEl.innerHTML = entries.map(([name, data]) => `
+        <div class="db-row">
+            <span class="db-name">${name}</span>
+            <span class="db-meta">${(data.mins / 60).toFixed(1)} 小時 · $${Math.round(data.money).toLocaleString()}</span>
+        </div>
+    `).join('');
+}
+window.renderIncomePanel = renderIncomePanel;
+// ▲▲▲ 新增結束 ▲▲▲
+
+// --- 5. 繪製行程方塊 (修正刪除與顏色套用邏輯) ---
+function drawEvent(course, container, dStr, col, overlapCount = 1) {
+    const div = document.createElement('div');
+    div.className = 'placed-event';
+    if (overlapCount > 1) {
+        div.classList.add('is-duplicate'); // 供 CSS 自訂邊框警示
     }
 
-    /* 新增：按鈕列在手機上黏在彈窗底部，不管表單多長，永遠看得到、按得到，
-       解決「滑不到儲存/取消按鈕」的問題。 */
-    .modal-buttons {
-        position: sticky;
-        bottom: 0;
-        background-color: #fefefe;
-        padding-top: 12px;
-        padding-bottom: 4px;
-        margin-top: 12px;
+    const currentCourses = window.courses || courses || [];
+    const latestStudentData = currentCourses.find(c => c.name === course.name && c.color);
+    
+    // 【修正 2】：使用正確計算出來的 currentColor，修復側邊欄改色後卡片顏色不更新問題
+    const currentColor = latestStudentData ? latestStudentData.color : (course.color || '#828181');
+    div.style.backgroundColor = currentColor;
+    div.style.position = 'relative'; // 確保徽章可定位於右下角
+
+    let gridCol = (col === 0 ? 7 : col) + 1; 
+    div.style.gridColumn = gridCol;
+    div.style.gridRow = `${course.startRow} / ${course.endRow}`;
+    
+    const isShort = course.duration <= 90; 
+    const repeatTag = course.isRepeating ? "🔄" : "";
+
+    const badgeHTML = overlapCount > 1 
+        ? `<div class="duplicate-badge" title="此時段有 ${overlapCount} 堂重複課程" style="position: absolute; bottom: 2px; right: 2px; background: #040404; color: #fff; font-size: 10px; font-weight: bold; padding: 1px 5px; border-radius: 8px; line-height: 1; z-index: 2; box-shadow: 0 1px 3px rgba(0,0,0,0.3);">×${overlapCount}</div>`
+        : '';
+
+    div.innerHTML = isShort ? `
+        <div style="display: flex; flex-direction: column; justify-content: center; height: 100%;">
+            <strong style="font-size: 10px; font-weight: 700">${course.name}${repeatTag}</strong>
+            <span style="font-size: 10px; scale: 0.9; transform-origin: left;">${course.start} | ${course.loc}</span>
+        </div>
+        ${badgeHTML}
+    ` : `
+        <strong>${course.name} ${repeatTag}</strong>
+        <span>📍 ${course.loc}</span>
+        <span>⏰ ${course.start}-${course.end}</span>
+        ${badgeHTML}
+    `;
+
+    // 點擊編輯
+    div.onclick = (e) => { 
+        e.stopPropagation(); 
+        openModal(true, course); 
+    };
+
+    // 右鍵刪除邏輯
+    div.oncontextmenu = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const idStr = course.id.toString();
+
+        if (!course.isRepeating) {
+            if (confirm(`確定要刪除 [${course.name}] 嗎？`)) {
+                if (typeof window.removeEventFromCloud === 'function') {
+                    window.removeEventFromCloud(idStr);
+                }
+                if (typeof window.courses !== 'undefined') {
+                    window.courses = window.courses.filter(c => c.id.toString() !== idStr);
+                }
+                courses = courses.filter(c => c.id.toString() !== idStr);
+                renderAll();
+            }
+        } else {
+            const action = prompt("請選擇刪除方式：\n1. 僅刪除本週 (" + dStr + ")\n2. 永久刪除整個循環", "1");
+            
+            if (action === "1") {
+                if (!course.exceptions) course.exceptions = [];
+                if (!course.exceptions.includes(dStr)) {
+                    course.exceptions.push(dStr);
+
+                    const idx = courses.findIndex(c => c.id.toString() === idStr);
+                    if (idx !== -1) courses[idx] = course;
+                    if (window.courses) {
+                        const wIdx = window.courses.findIndex(c => c.id.toString() === idStr);
+                        if (wIdx !== -1) window.courses[wIdx] = course;
+                    }
+
+                    if (typeof window.uploadEvent === 'function') {
+                        window.uploadEvent(course); // 同步回雲端
+                    }
+                    renderAll(); 
+                } else {
+                    alert("該日期已在刪除清單中");
+                }
+            } else if (action === "2") {
+                if (confirm(`⚠️ 警告：這將刪除所有週次的 [${course.name}]，確定嗎？`)) {
+                    if (typeof window.removeEventFromCloud === 'function') {
+                        window.removeEventFromCloud(idStr);
+                    }
+                    if (typeof window.courses !== 'undefined') {
+                        window.courses = window.courses.filter(c => c.id.toString() !== idStr);
+                    }
+                    courses = courses.filter(c => c.id.toString() !== idStr); 
+                    renderAll(); 
+                }
+            }
+        }
+    };
+
+    container.appendChild(div);
+}
+
+// --- 6. 側邊欄渲染 ---
+function renderSidebar(studentStats) {
+    const statsDiv = document.getElementById('monthly-stats');
+    if (!statsDiv) return;
+    statsDiv.innerHTML = "";
+    
+    const entries = Object.entries(studentStats).sort((a, b) => b[1].mins - a[1].mins);    
+    if (entries.length === 0) { 
+        statsDiv.innerHTML = `<p class="no-record-tip">本月尚無教球紀錄</p>`; 
+        return; 
     }
 
-    .modal-buttons button {
-        /* 修改：手機版拿掉 120px 上限，按鈕平分寬度，觸控範圍更大更好按 */
-        max-width: none;
-    }
-    /* ▲▲▲ 修正結束 ▲▲▲ */
+    const currentCourses = window.courses || courses || [];
 
-    .time-row {
-        flex-direction: column;
-        gap: 0;
-    }
-
-    .modal-content input, .modal-content select {
-        font-size: 16px;
-        padding: 12px;
-    }
-
-     .auth-box {
-        padding: 28px 24px 24px;
-    }
+    entries.forEach(([name, data]) => {
+        const student = currentCourses.find(c => c.name === name && c.color);
+        const color = student ? student.color : '#c4c4c4';
+        const p = document.createElement('div');
+        p.className = 'stat-item';
+        
+        p.innerHTML = `
+            <input type="color" value="${color}" 
+                onchange="updateStudentColor('${name}', this.value)">
+            <span class="student-name">${name}</span>
+            <div class="info-right">
+                <strong>${(data.mins / 60).toFixed(1)} <span class="unit">hr</span></strong>
+                <span class="income">$${Math.round(data.money).toLocaleString()}</span>
+            </div>
+        `;
+        
+        statsDiv.appendChild(p);
+    });
 }
 
-@media (max-width: 480px) {
-    .calendar-header h3 {font-size: 14px;}
-    .day-header {padding: 2px;}
+function updateStudentColor(name, newColor) {
+    const currentCourses = window.courses || courses || [];
+    currentCourses.filter(c => c.name === name).forEach(c => {
+        c.color = newColor;
+        if (typeof window.uploadEvent === 'function') {
+            window.uploadEvent(c);
+        }
+    });
+    renderAll();
+    saveToStorage();
 }
 
-/* ▼▼▼ 新增：教練頁面頂部導覽列與畫面切換 ▼▼▼ */
-.coach-nav {
-    display: flex;
-    gap: 8px;
-    padding: 12px 20px;
-    background: #ffffff;
-    border-bottom: 1px solid #eaedf1;
-}
+// --- 7. 日期與儲存 ---
+function updateWeekDates() {
+    const dayOfWeek = viewDate.getDay(); 
+    const offset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const monday = new Date(viewDate);
+    monday.setDate(viewDate.getDate() + offset);
 
-.coach-nav-btn {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 8px;
-    background: transparent;
-    color: #546e7a;
-    font-family: "Microsoft JhengHei", sans-serif;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
-}
+    const dayHeaders = document.querySelectorAll('.day-header');
+    dayHeaders.forEach((header, index) => {
+        const date = new Date(monday);
+        date.setDate(monday.getDate() + index);
+        const label = header.querySelector('.date-label');
+        if (label) label.innerText = `${date.getMonth() + 1}/${date.getDate()}`;
+        header.dataset.fullDate = date.toLocaleDateString('en-CA');
+    });
 
-.coach-nav-btn:hover {
-    background: #f0f2f5;
-}
-
-.coach-nav-btn.active {
-    background: #2c3e50;
-    color: #ffffff;
-}
-
-/* 三個畫面：預設全部隱藏，只有 .active 那個顯示 */
-.coach-panel {
-    display: none;
-}
-
-.coach-panel.active {
-    display: flex; /* main-wrapper 本來就是 flex，其餘兩個畫面下面另外用 .panel-inner 排版 */
-}
-
-.panel-inner {
-    padding: 24px;
-    max-width: 900px;
-    margin: 0 auto;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.panel-title {
-    font-size: 20px;
-    font-weight: 700;
-    color: #2c3e50;
-    margin: 0 0 20px;
-}
-
-.panel-subtitle {
-    font-size: 15px;
-    font-weight: 700;
-    color: #2c3e50;
-    margin: 24px 0 12px;
-}
-
-/* 本月收入畫面：兩張大卡片 */
-.income-summary-row {
-    display: flex;
-    gap: 16px;
-}
-
-.income-summary-card {
-    flex: 1;
-    background: #ffffff;
-    border: 1px solid #eaedf1;
-    border-radius: 12px;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
-}
-
-.income-summary-card .label {
-    font-size: 13px;
-    color: #7f8c8d;
-}
-
-.income-summary-card .value {
-    font-size: 28px;
-    font-weight: 700;
-    color: #2c3e50;
-    font-variant-numeric: tabular-nums;
-}
-
-/* 學生資料庫 / 收入分項：清單列 */
-.db-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: #ffffff;
-    border: 1px solid #eaedf1;
-    border-radius: 10px;
-    padding: 12px 16px;
-    margin-bottom: 8px;
-}
-
-.db-row .db-name {
-    font-weight: 600;
-    color: #2c3e50;
-    font-size: 15px;
-}
-
-.db-row .db-meta {
-    font-size: 13px;
-    color: #7f8c8d;
-    text-align: right;
-}
-
-@media (max-width: 768px) {
-    .coach-nav {
-        padding: 10px 12px;
-        overflow-x: auto;
-    }
-    .coach-nav-btn {
-        flex-shrink: 0;
-        padding: 8px 12px;
-        font-size: 13px;
-    }
-    .panel-inner {
-        padding: 16px;
-    }
-    .income-summary-row {
-        flex-direction: column;
+    const middleDate = new Date(monday); 
+    middleDate.setDate(monday.getDate() + 3);
+    const rangeEl = document.getElementById('current-month-range');
+    if (rangeEl) {
+        rangeEl.innerText = `📅 ${middleDate.getFullYear()}年 ${middleDate.getMonth() + 1}月行程`;
     }
 }
-/* ▲▲▲ 新增結束 ▲▲▲ */
 
-/* ▼▼▼ 新增：學生資料庫畫面的展開列、新增/刪除按鈕樣式 ▼▼▼ */
-.panel-header-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
+function changeWeek(direction) {
+    viewDate.setDate(viewDate.getDate() + (direction * 7));
+    updateWeekDates(); 
+    renderAll();
 }
 
-.panel-header-row .panel-title {
-    margin: 0;
+function goToday() {
+    viewDate = new Date();
+    updateWeekDates(); 
+    renderAll();
 }
 
-.add-student-btn {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 8px;
-    background: #098579;
-    color: #fff;
-    font-family: "Microsoft JhengHei", sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
+function toggleCustomLoc() {
+    const select = document.getElementById('m-loc');
+    const customInput = document.getElementById('m-loc-custom');
+    if (select && customInput) {
+        customInput.style.display = (select.value === 'CUSTOM') ? 'block' : 'none';
+    }
 }
 
-.add-student-btn:hover {
-    background: #076b61;
+function saveToStorage() { 
+    const currentCourses = window.courses || courses || [];
+    localStorage.setItem('coach_data_v3', JSON.stringify(currentCourses)); 
 }
 
-.db-row-wrap {
-    margin-bottom: 8px;
+function loadData() {
+    console.log("正在連線至雲端資料庫...");
 }
 
-.db-row-clickable {
-    cursor: pointer;
-    margin-bottom: 0;
-    transition: background 0.15s ease;
+function renderAndSave() { 
+    renderAll();
 }
 
-.db-row-clickable:hover {
-    background: #f8f9fa;
+// 【修正 1】：實作未定義的 clearWorkData 函式
+function clearWorkData() {
+    if (confirm("⚠️ 確定要清空所有課程資料嗎？此操作不可逆！")) {
+        courses = [];
+        window.courses = [];
+        localStorage.removeItem('coach_data_v3');
+        renderAll();
+        console.log("🧹 課程資料已清空");
+    }
 }
 
-.db-detail {
-    background: #f8f9fa;
-    border: 1px solid #eaedf1;
-    border-top: none;
-    border-radius: 0 0 10px 10px;
-    padding: 14px 16px;
-    margin-top: -8px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+/** 🛠️ Helper: 計算指定月份每週一的 Date 物件陣列 */
+function getMondaysOfMonth(year, month) {
+    const mondays = [];
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+
+    // 找到當月第一天所在的週一
+    let current = new Date(firstDay);
+    const dayOfWeek = current.getDay();
+    const diffToMonday = (dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
+    current.setDate(current.getDate() + diffToMonday);
+
+    // 只要當週包含當月的日子，就記錄下來
+    while (current <= lastDay || current.getMonth() === month) {
+        mondays.push(new Date(current));
+        current.setDate(current.getDate() + 7);
+        if (current.getMonth() !== month && current.getDate() > 7) break;
+    }
+    return mondays;
 }
 
-.db-detail-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 14px;
-    color: #2c3e50;
+export function renderAll() {
+    try {
+        const isStudent = currentUser && currentUser.role === 'student';
+
+        // 🎯 1. 取得行事曆容器與日期標頭
+        const container = isStudent 
+            ? (document.getElementById('student-calendar-grid') || document.getElementById('dropzone'))
+            : document.getElementById('dropzone');
+
+        if (!container) return;
+
+        // 清除舊的行程方塊
+        container.querySelectorAll('.placed-event').forEach(el => el.remove());
+
+        const dayHeaders = document.querySelectorAll('.day-header');
+        if (!dayHeaders || dayHeaders.length < 7 || !dayHeaders[3]?.dataset?.fullDate) {
+            console.log("📅 [renderAll] 日期標頭尚未就緒，暫緩渲染");
+            return;
+        }
+
+        const weekDates = Array.from(dayHeaders).map(h => h.dataset.fullDate);
+        const middleDate = new Date(dayHeaders[3].dataset.fullDate);
+        const currentYear = middleDate.getFullYear();
+        const currentMonth = middleDate.getMonth();
+
+        let weekTotalMinutes = 0;
+        let studentMonthMinutes = 0;
+
+        const currentCourses = window.courses || courses || [];
+
+        // 🎯 2. 收集當週需要繪製的行程 ( pendingEvents )
+        const pendingEvents = [];
+
+        currentCourses.forEach(course => {
+            if (!course) return;
+
+            // 🔒 學生權限過濾：若為學生登入，僅保留名稱匹配的課程
+            if (isStudent) {
+                const studentNameMatch = course.name === currentUser.name || course.studentName === currentUser.name;
+                if (!studentNameMatch) return; 
+            }
+
+            const isException = (dStr) => course.exceptions && course.exceptions.includes(dStr);
+
+            if (course.isRepeating) {
+                dayHeaders.forEach(header => {
+                    const dStr = header.dataset.fullDate;
+                    const hDay = header.dataset.day; // 週一="1"...週日="0"
+
+                    let normalizedCourseDay = (course.day === "8" ? "0" : (parseInt(course.day) - 1).toString());
+
+                    if (normalizedCourseDay === hDay && !isException(dStr)) {
+                        pendingEvents.push({ course, dStr, col: parseInt(hDay) });
+                        if (course.type === 'work') weekTotalMinutes += Number(course.duration || 0);
+                    }
+                });
+            } else {
+                if (weekDates.includes(course.date)) {
+                    const targetHeader = Array.from(dayHeaders).find(h => h.dataset.fullDate === course.date);
+                    if (targetHeader) {
+                        pendingEvents.push({ course, dStr: course.date, col: parseInt(targetHeader.dataset.day) });
+                        if (course.type === 'work') weekTotalMinutes += Number(course.duration || 0);
+                    }
+                }
+            }
+        });
+
+        // 🎯 3. 精確計算重疊數量 ( overlapCount ) 並進行 DOM 繪製
+        pendingEvents.forEach(({ course, dStr, col }) => {
+            const overlapCount = pendingEvents.filter(item => 
+                item.dStr === dStr && 
+                !(course.endRow <= item.course.startRow || course.startRow >= item.course.endRow)
+            ).length;
+
+            if (typeof drawEvent === 'function') {
+                drawEvent(course, container, dStr, col, overlapCount);
+            }
+        });
+
+        // 🎯 4. 數據統計與 UI 介面更新
+        if (isStudent) {
+            // 🎓 學生端：計算學生當月總上課時數
+            currentCourses.forEach(course => {
+                const isMyCourse = course.name === currentUser.name || course.studentName === currentUser.name;
+                if (isMyCourse && course.type === 'work') {
+                    if (typeof course.isMonthMatch === 'function' ? course.isMonthMatch(currentYear, currentMonth) : true) {
+                        studentMonthMinutes += Number(course.duration || 0);
+                    }
+                }
+            });
+
+            // 更新學生頁面數字
+            const studentHoursEl = document.getElementById('student-total-hours');
+            if (studentHoursEl) {
+                studentHoursEl.innerText = (studentMonthMinutes / 60).toFixed(1);
+            }
+
+            // 更新繳費狀態
+            const paymentEl = document.getElementById('student-class-count');
+            if (paymentEl) {
+                const isPaid = currentUser.isPaid ?? false;
+                paymentEl.innerText = isPaid ? '已繳費' : '未繳費';
+                paymentEl.style.color = isPaid ? '#2e7d32' : '#d32f2f';
+            }
+
+        } else {
+            // 👨‍🏫 教練端：全月數據與側邊欄渲染
+            if (typeof calculateMonthlyData === 'function') {
+                const monthData = calculateMonthlyData(currentYear, currentMonth);
+
+                const weekTotalEl = document.getElementById('week-total');
+                if (weekTotalEl) weekTotalEl.innerText = (weekTotalMinutes / 60).toFixed(1);
+
+                const monthTotalEl = document.getElementById('month-total');
+                if (monthTotalEl) monthTotalEl.innerText = (monthData.totalMinutes / 60).toFixed(1);
+
+                const monthIncomeEl = document.getElementById('month-income');
+                if (monthIncomeEl) monthIncomeEl.innerText = Math.round(monthData.totalIncome).toLocaleString();
+
+                if (typeof renderSidebar === 'function') {
+                    renderSidebar(monthData.studentStats);
+                }
+            }
+        }
+    } catch (error) {
+        console.error("❌ renderAll 執行失敗:", error);
+    }
 }
 
-.session-count {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-variant-numeric: tabular-nums;
-    font-size: 16px;
-}
+window.renderAll = renderAll;
 
-.session-count button {
-    width: 26px;
-    height: 26px;
-    border: 1px solid #cfd8dc;
-    border-radius: 6px;
-    background: #fff;
-    cursor: pointer;
-    font-size: 15px;
-    line-height: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
+/** 🚀 匯出整月課表與統計圖片（單一側邊欄 + 舒適排版） */
+window.exportScheduleToImage = async function(event) {
+    const btn = event?.currentTarget || event?.target;
+    const originalText = btn?.innerText || '';
+    const mainApp = document.getElementById('main-app') || document.querySelector('.main-wrapper');
 
-.session-count button:hover {
-    background: #eef1f3;
-}
+    if (!mainApp) return alert("找不到要截圖的畫面區域");
 
-.db-detail .clear-btn {
-    margin-top: 0;
-    width: auto;
-    align-self: flex-start;
-    padding: 8px 14px;
-    font-size: 13px;
-}
-/* ▲▲▲ 新增結束 ▲▲▲ */
+    if (btn) {
+        btn.innerText = '📸 正在生成全月課表...';
+        btn.disabled = true;
+    }
 
-/* ▼▼▼ 新增：學生資料庫展開區塊裡的按鈕列（修正堂數／刪除學生並排） ▼▼▼ */
-.db-detail-actions {
-    display: flex;
-    gap: 8px;
-}
+    const originalViewDate = new Date(viewDate); // 1. 備份原始日期
+    const targetYear = viewDate.getFullYear();
+    const targetMonth = viewDate.getMonth();
+    const weekMondays = getMondaysOfMonth(targetYear, targetMonth);
 
-.db-detail-actions .clear-btn {
-    flex: 1;
-}
-/* ▲▲▲ 新增結束 ▲▲▲ */
+    const WEEK_SPACING = 30; 
+
+    try {
+        const canvases = [];
+
+        // 2. 依次擷取每週畫面
+        for (let i = 0; i < weekMondays.length; i++) {
+            const monday = weekMondays[i];
+            const isFirstWeek = (i === 0);
+
+            viewDate = new Date(monday);
+            if (typeof updateWeekDates === 'function') updateWeekDates();
+            if (typeof renderAll === 'function') renderAll();
+
+            // 等待 DOM 重繪
+            await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 150)));
+
+            const canvas = await html2canvas(mainApp, {
+                scale: 1.5,
+                useCORS: true,
+                backgroundColor: '#ffffff',
+                logging: false,
+                onclone: (clonedDoc) => {
+                    clonedDoc.querySelectorAll('#export-ics-btn, .floating-controls, .toggle-income-btn')
+                             .forEach(el => el.style.visibility = 'hidden');
+
+                    if (!isFirstWeek) {
+                        const sidebar = clonedDoc.querySelector('.sidebar') || clonedDoc.querySelector('#monthly-stats-container');
+                        if (sidebar) {
+                            sidebar.style.display = 'none';
+                        }
+                    }
+                }
+            });
+            canvases.push(canvas);
+        }
+
+        // 3. 計算拼接後的總寬度與總高度
+        const totalWidth = canvases[0].width;
+        const totalHeight = canvases.reduce((sum, c) => sum + c.height, 0) + (WEEK_SPACING * (canvases.length - 1));
+
+        const mergedCanvas = document.createElement('canvas');
+        mergedCanvas.width = totalWidth;
+        mergedCanvas.height = totalHeight;
+        const ctx = mergedCanvas.getContext('2d');
+
+        // 滿版白色背景
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, totalWidth, totalHeight);
+
+        // 4. 垂直繪製與拼接
+        let currentY = 0;
+        for (let i = 0; i < canvases.length; i++) {
+            const c = canvases[i];
+            ctx.drawImage(c, 0, currentY);
+            currentY += c.height + WEEK_SPACING;
+        }
+
+        // 5. 匯出圖片檔案
+        mergedCanvas.toBlob((blob) => {
+            if (!blob) throw new Error('Blob 生成失敗');
+            
+            const imageUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = imageUrl;
+            link.download = `桌球課表全月報表_${targetYear}年${targetMonth + 1}月.png`;
+            document.body.appendChild(link);
+            link.click();
+            
+            document.body.removeChild(link);
+            URL.revokeObjectURL(imageUrl);
+        }, 'image/png');
+
+    } catch (err) {
+        console.error('匯出全月圖片失敗:', err);
+        alert('匯出時發生錯誤，請確認是否有引入 html2canvas 套件。');
+    } finally {
+        // 6. 還原原始畫面狀態
+        viewDate = originalViewDate;
+        if (typeof updateWeekDates === 'function') updateWeekDates();
+        if (typeof renderAll === 'function') renderAll();
+
+        if (btn) {
+            btn.innerText = originalText;
+            btn.disabled = false;
+        }
+    }
+};
+
+window.saveFromModal = saveFromModal;
+window.closeModal = closeModal;
+window.changeWeek = changeWeek;
+window.goToday = goToday;
+window.toggleCustomLoc = toggleCustomLoc;
+window.clearWorkData = clearWorkData;
+window.updateStudentColor = updateStudentColor;

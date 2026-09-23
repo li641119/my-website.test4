@@ -1251,3 +1251,14 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     font-size: 13px;
 }
 /* ▲▲▲ 新增結束 ▲▲▲ */
+
+/* ▼▼▼ 新增：學生資料庫展開區塊裡的按鈕列（修正堂數／刪除學生並排） ▼▼▼ */
+.db-detail-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.db-detail-actions .clear-btn {
+    flex: 1;
+}
+/* ▲▲▲ 新增結束 ▲▲▲ */
