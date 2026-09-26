@@ -103,7 +103,7 @@
                         </span>
                     </p>
                 </div>
-                <button id="export-ics-btn" class="clear-btn secondary" onclick="exportScheduleToImage()"> 📤 匯出本月行事曆 (.png)</button>
+                <button id="export-ics-btn" class="clear-btn secondary" onclick="exportScheduleToImage()"> 📤 匯出本週行事曆 (.png)</button>
             </div>
         
             <div class="calendar-container">
@@ -177,17 +177,54 @@
     <div id="student-view" style="display: none;">
         <div class="student-header">
             <h2>👋 您好，<span id="student-name-display">同學</span></h2>
-            <div class="student-stats-row">
-                <div class="student-stat-card">
-                    <span>本月上課時數</span>
-                    <span class="stat-value" id="student-total-hours">0.0</span>
+        </div>
+
+        <!-- ▼▼▼ 新增：重點摘要卡片 ▼▼▼ -->
+        <div class="summary-card">
+            <div class="summary-top-row">
+                <div class="plan-info">
+                    <span class="plan-label">目前方案</span>
+                    <span class="plan-name" id="summary-plan-name">—</span>
                 </div>
-                <div class="student-stat-card">
-                    <span>繳費情形</span>
-                    <span class="stat-value" id="student-class-count">未繳費</span>
+                <span class="renewal-tag hide" id="summary-renewal-tag"></span>
+            </div>
+
+            <div class="summary-sessions">
+                <div class="sessions-number-row">
+                    <span class="sessions-number" id="summary-sessions-number">—/—</span>
+                    <span class="sessions-unit">堂</span>
                 </div>
+                <div class="progress-bar-track">
+                    <div class="progress-bar-fill" id="summary-progress-fill"></div>
+                </div>
+                <p class="sessions-status-text" id="summary-sessions-status"></p>
+                <button type="button" id="summary-renewal-btn" class="renewal-btn hide" onclick="requestRenewal()">聯繫教練付款續約</button>
+            </div>
+
+            <div class="summary-divider"></div>
+
+            <div class="summary-row">
+                <span class="summary-row-label">📅 下次上課</span>
+                <span class="summary-row-value" id="summary-next-class">讀取中...</span>
+            </div>
+
+            <div class="summary-row">
+                <span class="summary-row-label">⏳ 課程效期</span>
+                <span class="summary-row-value" id="summary-expiry">讀取中...</span>
             </div>
         </div>
+        <!-- ▲▲▲ 新增結束 ▲▲▲ -->
+
+        <!-- ▼▼▼ 修改：原本這裡有兩張卡片（本月上課時數／繳費情形），
+             「繳費情形」的概念已經被上面的課程包摘要卡取代，所以拿掉，
+             只留「本月上課時數」 ▼▼▼ -->
+        <div class="student-stats-row">
+            <div class="student-stat-card">
+                <span>本月上課時數</span>
+                <span class="stat-value" id="student-total-hours">0.0</span>
+            </div>
+        </div>
+        <!-- ▲▲▲ 修改結束 ▲▲▲ -->
 
         <div class="calendar-container">
             <div id="student-calendar-grid"></div> 
