@@ -107,7 +107,16 @@ if (registerForm) {
             // ⚠️ 非常重要：這裡填的姓名，必須跟教練排課時在「行程名稱」欄位打的
             // 學生姓名「一字不差」完全一樣（包含空白、全形半形），
             // 否則系統會找不到對應的課程。
-            await setDoc(doc(db, "students", name), { email: email }, { merge: true });
+            const existingSnap = await getDoc(doc(db, "students", name));
+            const existingData = existingSnap.exists() ? existingSnap.data() : {};
+            const patch = { email: email };
+            // ▼▼▼ 新增：如果教練還沒幫這個學生設定過堂數，註冊時順便補上預設值 10/10 ▼▼▼
+            if (existingData.totalSessions === undefined) {
+                patch.totalSessions = 10;
+                patch.remainingSessions = 10;
+            }
+            // ▲▲▲ 新增結束 ▲▲▲
+            await setDoc(doc(db, "students", name), patch, { merge: true });
 
             // 註冊成功後，Firebase 預設會自動登入，
             // 這裡改成主動登出，跳出成功提醒，清空表單並切回登入分頁，
@@ -375,6 +384,10 @@ function startLiveSync() {
             courses = myEvents;
         }
 
+        // ▼▼▼ 新增：每次課表資料更新時，順便檢查有沒有已經過了上課時間、還沒扣款的課程 ▼▼▼
+        checkAndDeductPastSessions(myEvents);
+        // ▲▲▲ 新增結束 ▲▲▲
+
         // 🎨 渲染日曆 UI
         if (window.updateCalendarUI) {
             window.updateCalendarUI(myEvents);
@@ -387,7 +400,136 @@ function startLiveSync() {
             window.renderAll();
         }
     });
+
+    // ▼▼▼ 新增：每 5 分鐘重新檢查一次有沒有新的課程時間過了要扣款
+    // （單靠 onSnapshot 只有資料變動時才會觸發，時間流逝本身不會觸發，
+    // 所以需要另外定時檢查，才不會漏掉「教練整天沒動任何課表，但已經有課上完了」的情況）
+    if (window.__sessionDeductionInterval) clearInterval(window.__sessionDeductionInterval);
+    window.__sessionDeductionInterval = setInterval(() => {
+        checkAndDeductPastSessions(window.courses || []);
+    }, 5 * 60 * 1000);
+    // ▲▲▲ 新增結束 ▲▲▲
 }
+
+// ------------------------------------------------------------
+// ▼▼▼ 新增：時間到自動扣課堂數
+// 規則：只要「教球」課程排定的下課時間已經過了，不論實際有沒有上課、
+// 或學生臨時請假，一律照扣一堂。只會在教練登入的瀏覽器裡執行。
+//
+// ⚠️ 生效日期：2027-01-01 之前完全不執行扣款，避免把過去已經上完、
+// 從來沒設計要扣款的舊課程也一起算進去，導致堂數變成一大堆負數。
+// ------------------------------------------------------------
+const DEDUCTION_START_DATE = new Date('2027-01-01T00:00:00');
+
+async function checkAndDeductPastSessions(events) {
+    const now = new Date();
+    if (now < DEDUCTION_START_DATE) {
+        // 還沒到生效日期，完全不檢查、不扣款
+        return;
+    }
+
+    for (const course of events) {
+        if (!course || course.type !== 'work' || !course.name || !course.end) continue;
+
+        try {
+            if (course.isRepeating) {
+                await deductRepeatingCourse(course, now);
+            } else {
+                await deductOneTimeCourse(course, now);
+            }
+        } catch (err) {
+            console.error(`檢查課程 [${course.name}] 的扣款狀態時發生錯誤:`, err);
+        }
+    }
+}
+
+// 單次課程：時間過了、還沒標記扣過款，就扣一堂並標記
+async function deductOneTimeCourse(course, now) {
+    if (course.sessionDeducted) return; // 已經扣過了，不重複扣
+    if (!course.date) return;
+
+    const classEndDateTime = new Date(`${course.date}T${course.end}:00`);
+    if (isNaN(classEndDateTime.getTime()) || classEndDateTime >= now) return; // 時間格式異常或還沒到
+    if (classEndDateTime < DEDUCTION_START_DATE) return; // 早於扣款生效日期，不扣
+
+    await deductOneSession(course.name);
+
+    try {
+        await setDoc(doc(db, "events", course.id.toString()), { sessionDeducted: true }, { merge: true });
+    } catch (err) {
+        console.error("標記單次課程已扣款失敗:", err);
+    }
+}
+
+// 重複課程：往回檢查最近 60 天內，符合星期幾、時間已過、還沒扣過的日期，
+// 用 deductedDates 陣列記錄哪些日期已經扣過（跟現有的 exceptions 陣列是同樣的模式）
+async function deductRepeatingCourse(course, now) {
+    const deductedDates = course.deductedDates || [];
+    const targetDay = (course.day === "8" ? 0 : parseInt(course.day) - 1);
+
+    const newlyDeducted = [];
+    let cursor = new Date(now);
+    cursor.setDate(cursor.getDate() - 60); // 只往回追 60 天，避免無限往前查
+    // 【新增】不管往回推 60 天算出來是哪一天，都不能早於扣款生效日期
+    if (cursor < DEDUCTION_START_DATE) {
+        cursor = new Date(DEDUCTION_START_DATE);
+    }
+
+    while (cursor <= now) {
+        if (cursor.getDay() === targetDay) {
+            const dStr = cursor.toLocaleDateString('en-CA');
+            const classEndDateTime = new Date(`${dStr}T${course.end}:00`);
+
+            // 注意：這裡刻意「不」排除 exceptions（請假）的日期 ——
+            // 因為你確認過，臨時請假一樣要扣課
+            if (!isNaN(classEndDateTime.getTime()) && classEndDateTime < now && !deductedDates.includes(dStr)) {
+                newlyDeducted.push(dStr);
+            }
+        }
+        cursor.setDate(cursor.getDate() + 1);
+    }
+
+    if (newlyDeducted.length === 0) return;
+
+    // 依序扣完這幾堂（可能因為好幾天沒開網頁，一次補扣好幾堂）
+    for (const dStr of newlyDeducted) {
+        await deductOneSession(course.name);
+    }
+
+    try {
+        await setDoc(
+            doc(db, "events", course.id.toString()),
+            { deductedDates: [...deductedDates, ...newlyDeducted] },
+            { merge: true }
+        );
+    } catch (err) {
+        console.error("標記重複課程已扣款失敗:", err);
+    }
+}
+
+// 實際去扣 students/{姓名} 的剩餘堂數。
+// 刻意不設下限、允許扣成負數 —— 負數代表這個學生已經超支，
+// 提醒你該找他補買新的課程包了，而不是默默不扣、讓你以為堂數還夠
+async function deductOneSession(studentName) {
+    try {
+        const ref = doc(db, "students", studentName);
+        const snap = await getDoc(ref);
+        const data = snap.exists() ? snap.data() : {};
+        const total = data.totalSessions !== undefined ? data.totalSessions : 10;
+        const remaining = data.remainingSessions !== undefined ? data.remainingSessions : 10;
+        const newRemaining = remaining - 1;
+
+        await setDoc(ref, { totalSessions: total, remainingSessions: newRemaining }, { merge: true });
+        console.log(`⏱️ 已自動扣除 [${studentName}] 一堂課，剩餘 ${newRemaining} 堂`);
+
+        // 如果目前正開著學生資料庫畫面、而且剛好展開這個學生，順便更新畫面數字
+        const remainEl = document.getElementById(`remain-${studentName}`);
+        if (remainEl) remainEl.innerText = newRemaining;
+    } catch (err) {
+        console.error(`自動扣款失敗 [${studentName}]:`, err);
+    }
+}
+// ▲▲▲ 新增結束 ▲▲▲
 
 // ▼▼▼ 修正：改成用「姓名」查詢，不再依賴 studentEmail 欄位。
 // 原因：studentEmail 欄位只有在教練排課「當下」剛好查得到 Email 才會寫入，
@@ -469,23 +611,39 @@ window.uploadEvent = async (eventData) => {
             const lastCourse = (window.courses || []).find(c => c.name === eventData.name && c.price);
             currentPrice = lastCourse ? parseInt(lastCourse.price, 10) : 600;
         }
-        
-        const studentRef = doc(db, "students", eventData.name); // 假設文件 ID 就是姓名
-        const studentSnap = await getDoc(studentRef);
-        
-        let emailToUpload = "";
-        if (studentSnap.exists() && studentSnap.data().email) {
-            // 找到 Email 了
-            emailToUpload = studentSnap.data().email;
-        } else {
-            console.warn(`⚠️ 找不到學生 [${eventData.name}] 的對照 Email，已自動預設為空字串。`);
-        }
 
-        // 2. 自動記憶機制
-        await setDoc(studentRef, { 
-            defaultPrice: currentPrice 
-        }, { merge: true });
-        console.log(`🚀 雲端已記憶 ${eventData.name} 的預設學費為: ${currentPrice} 元`);
+        let emailToUpload = "";
+
+        // ▼▼▼ 修正：只有「教球」(type === 'work') 才會去讀寫 students collection。
+        // 原因：「上課」「其他行程」是你自己的私人行程，姓名欄位打的通常不是學生姓名
+        // （可能是課名、私事），不應該被誤存進學生資料庫，也不該影響堂數或預設學費。
+        // ⚠️ 提醒：這個修正只擋住「以後」的污染，之前如果已經有非學生的名字被誤存進
+        // students collection，需要你自己去「學生資料庫」畫面用刪除按鈕手動清掉，
+        // 系統沒辦法自動分辨哪些是舊的誤存資料。
+        if (eventData.type === 'work') {
+            const studentRef = doc(db, "students", eventData.name); // 假設文件 ID 就是姓名
+            const studentSnap = await getDoc(studentRef);
+            const existingData = studentSnap.exists() ? studentSnap.data() : {};
+
+            if (existingData.email) {
+                emailToUpload = existingData.email;
+            } else {
+                console.warn(`⚠️ 找不到學生 [${eventData.name}] 的對照 Email，已自動預設為空字串。`);
+            }
+
+            const patch = { defaultPrice: currentPrice };
+            // ▼▼▼ 新增：如果這個學生還沒有堂數欄位，補上預設值 10/10，
+            // 順便當作「這是真的學生」的標記，讓學生資料庫的清單可以用這個欄位過濾掉雜訊 ▼▼▼
+            if (existingData.totalSessions === undefined) {
+                patch.totalSessions = 10;
+                patch.remainingSessions = 10;
+            }
+            // ▲▲▲ 新增結束 ▲▲▲
+
+            await setDoc(studentRef, patch, { merge: true });
+            console.log(`🚀 雲端已記憶 ${eventData.name} 的預設學費為: ${currentPrice} 元`);
+        }
+        // ▲▲▲ 修正結束 ▲▲▲
 
         // 3. 儲存到原本的 events 集合
         const eventId = eventData.id.toString();
@@ -584,6 +742,21 @@ async function renderStudentDbPanel() {
         snap.forEach((docSnap) => {
             const data = docSnap.data();
             const name = docSnap.id;
+
+            // ▼▼▼ 新增：過濾掉污染資料。
+            // 真正的學生一定符合這兩個條件其中之一：
+            //   1. totalSessions 有值（曾經被排過教球課程，或被手動新增/自動扣款過）
+            //   2. email 有值（曾經註冊過帳號）
+            // 「上課」「其他」這種私人行程誤存進來的資料，兩者都不會有，會被擋掉。
+            // ⚠️ 例外：如果是「這次修正上線之前」就已經排過教球課、但從來沒被
+            // 編輯/重新儲存過的舊學生，暫時也會被這個過濾器擋住（因為還沒被補上
+            // totalSessions 欄位）。之後只要教練點開他任何一堂課存檔一次，
+            // 或用「＋新增學生」用同樣名字加一次，就會自動補上、重新出現在清單裡。
+            if (data.totalSessions === undefined && !data.email) {
+                return;
+            }
+            // ▲▲▲ 新增結束 ▲▲▲
+
             const emailText = data.email ? data.email : '（尚未註冊帳號）';
             const priceText = data.defaultPrice !== undefined ? `$${data.defaultPrice}` : '—';
             // 【新增】堂數：如果 Firestore 裡還沒有這個欄位，預設顯示 10/10
@@ -610,6 +783,10 @@ async function renderStudentDbPanel() {
                 </div>
             `);
         });
+        if (rows.length === 0) {
+            listEl.innerHTML = '<p class="no-data-hint">目前還沒有學生資料，點右上角「＋ 新增學生」開始建立</p>';
+            return;
+        }
         listEl.innerHTML = rows.join('');
     } catch (err) {
         console.error("讀取學生資料庫失敗:", err);
