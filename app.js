@@ -107,16 +107,7 @@ if (registerForm) {
             // ⚠️ 非常重要：這裡填的姓名，必須跟教練排課時在「行程名稱」欄位打的
             // 學生姓名「一字不差」完全一樣（包含空白、全形半形），
             // 否則系統會找不到對應的課程。
-            const existingSnap = await getDoc(doc(db, "students", name));
-            const existingData = existingSnap.exists() ? existingSnap.data() : {};
-            const patch = { email: email };
-            // ▼▼▼ 新增：如果教練還沒幫這個學生設定過堂數，註冊時順便補上預設值 10/10 ▼▼▼
-            if (existingData.totalSessions === undefined) {
-                patch.totalSessions = 10;
-                patch.remainingSessions = 10;
-            }
-            // ▲▲▲ 新增結束 ▲▲▲
-            await setDoc(doc(db, "students", name), patch, { merge: true });
+            await setDoc(doc(db, "students", name), { email: email }, { merge: true });
 
             // 註冊成功後，Firebase 預設會自動登入，
             // 這裡改成主動登出，跳出成功提醒，清空表單並切回登入分頁，
@@ -335,11 +326,6 @@ onAuthStateChanged(auth, async (user) => {
 
             console.log("啟動學生模式，姓名比對用:", studentName || '(尚未找到對應姓名)');
             startStudentLiveSync(studentName);
-            // ▼▼▼ 修正：原本呼叫的 renderStudentSummaryCard() 這個函式根本不存在，
-            // 會導致學生一登入就直接報錯崩潰。改成呼叫真正定義好的
-            // watchStudentSummaryCard()，它會建立即時監聽，資料一到就自動渲染 ▼▼▼
-            watchStudentSummaryCard(studentName);
-            // ▲▲▲ 修正結束 ▲▲▲
         }
 
         renderAll();
@@ -357,12 +343,6 @@ onAuthStateChanged(auth, async (user) => {
         currentUser = { uid: null, email: '', role: 'coach', name: '' };
 
         if (unsubscribe) unsubscribe();
-        // ▼▼▼ 新增：登出時也要清掉學生摘要卡片的監聽器，避免登出後還在背景偷偷觸發 ▼▼▼
-        if (unsubscribeStudentSummary) {
-            unsubscribeStudentSummary();
-            unsubscribeStudentSummary = null;
-        }
-        // ▲▲▲ 新增結束 ▲▲▲
     }
 });
 // ▲▲▲ 修正結束 ▲▲▲
@@ -395,10 +375,6 @@ function startLiveSync() {
             courses = myEvents;
         }
 
-        // ▼▼▼ 新增：每次課表資料更新時，順便檢查有沒有已經過了上課時間、還沒扣款的課程 ▼▼▼
-        checkAndDeductPastSessions(myEvents);
-        // ▲▲▲ 新增結束 ▲▲▲
-
         // 🎨 渲染日曆 UI
         if (window.updateCalendarUI) {
             window.updateCalendarUI(myEvents);
@@ -411,181 +387,7 @@ function startLiveSync() {
             window.renderAll();
         }
     });
-
-    // ▼▼▼ 新增：每 5 分鐘重新檢查一次有沒有新的課程時間過了要扣款
-    // （單靠 onSnapshot 只有資料變動時才會觸發，時間流逝本身不會觸發，
-    // 所以需要另外定時檢查，才不會漏掉「教練整天沒動任何課表，但已經有課上完了」的情況）
-    if (window.__sessionDeductionInterval) clearInterval(window.__sessionDeductionInterval);
-    window.__sessionDeductionInterval = setInterval(() => {
-        checkAndDeductPastSessions(window.courses || []);
-    }, 5 * 60 * 1000);
-    // ▲▲▲ 新增結束 ▲▲▲
-
-    // ▼▼▼ 新增：測試用工具。在瀏覽器 Console 打 debugRunDeductionCheck()
-    // 就能立刻手動觸發一次扣款檢查，不用等 5 分鐘或重新整理頁面，方便測試用
-    window.debugRunDeductionCheck = () => {
-        console.log("🔧 手動觸發扣款檢查...");
-        checkAndDeductPastSessions(window.courses || []);
-    };
-    // ▲▲▲ 新增結束 ▲▲▲
 }
-
-// ------------------------------------------------------------
-// ▼▼▼ 新增：時間到自動扣課堂數
-// 規則：只要「教球」課程排定的下課時間已經過了，不論實際有沒有上課、
-// 或學生臨時請假，一律照扣一堂。只會在教練登入的瀏覽器裡執行。
-//
-// ⚠️ 生效日期：2027-01-01 之前完全不執行扣款，避免把過去已經上完、
-// 從來沒設計要扣款的舊課程也一起算進去，導致堂數變成一大堆負數。
-// ------------------------------------------------------------
-const DEDUCTION_START_DATE = new Date('2027-01-01T00:00:00');
-
-// ▼▼▼ 新增：執行中鎖。Firestore 的 onSnapshot 只要 events collection
-// 裡任何一筆資料變動，就會整批重新觸發一次檢查；如果動作密集（例如連續
-// 編輯好幾堂課），前一次扣款的「已標記」還沒寫回 Firestore、下一次檢查
-// 就會誤判成沒扣過、重複再扣一次。這個鎖確保同一時間只有一個檢查在跑。
-let isDeductionRunning = false;
-// ▲▲▲ 新增結束 ▲▲▲
-
-async function checkAndDeductPastSessions(events) {
-    const now = new Date();
-    if (now < DEDUCTION_START_DATE) {
-        // 還沒到生效日期，完全不檢查、不扣款
-        return;
-    }
-
-    // ▼▼▼ 新增：如果上一輪檢查還沒跑完，這次直接跳過 ▼▼▼
-    if (isDeductionRunning) {
-        console.log("⏳ 扣款檢查已經在執行中，跳過這次重複觸發");
-        return;
-    }
-    isDeductionRunning = true;
-    // ▲▲▲ 新增結束 ▲▲▲
-
-    try {
-        for (const course of events) {
-            if (!course || course.type !== 'work' || !course.name || !course.end) continue;
-
-            try {
-                if (course.isRepeating) {
-                    await deductRepeatingCourse(course, now);
-                } else {
-                    await deductOneTimeCourse(course, now);
-                }
-            } catch (err) {
-                console.error(`檢查課程 [${course.name}] 的扣款狀態時發生錯誤:`, err);
-            }
-        }
-    } finally {
-        // ▼▼▼ 新增：不管成功或失敗，跑完都要把鎖放開 ▼▼▼
-        isDeductionRunning = false;
-        // ▲▲▲ 新增結束 ▲▲▲
-    }
-}
-
-// 單次課程：時間過了、還沒標記扣過款，就扣一堂並標記
-async function deductOneTimeCourse(course, now) {
-    if (course.sessionDeducted) return; // 已經扣過了，不重複扣
-    if (!course.date) return;
-
-    const classEndDateTime = new Date(`${course.date}T${course.end}:00`);
-    if (isNaN(classEndDateTime.getTime()) || classEndDateTime >= now) return; // 時間格式異常或還沒到
-    if (classEndDateTime < DEDUCTION_START_DATE) return; // 早於扣款生效日期，不扣
-
-    await deductOneSession(course.name);
-
-    try {
-        await setDoc(doc(db, "events", course.id.toString()), { sessionDeducted: true }, { merge: true });
-    } catch (err) {
-        console.error("標記單次課程已扣款失敗:", err);
-    }
-}
-
-// 重複課程：往回檢查最近 60 天內，符合星期幾、時間已過、還沒扣過的日期，
-// 用 deductedDates 陣列記錄哪些日期已經扣過（跟現有的 exceptions 陣列是同樣的模式）
-async function deductRepeatingCourse(course, now) {
-    const deductedDates = course.deductedDates || [];
-    const targetDay = (course.day === "8" ? 0 : parseInt(course.day) - 1);
-
-    const newlyDeducted = [];
-    let cursor = new Date(now);
-    cursor.setDate(cursor.getDate() - 60); // 只往回追 60 天，避免無限往前查
-    // 【新增】不管往回推 60 天算出來是哪一天，都不能早於扣款生效日期
-    if (cursor < DEDUCTION_START_DATE) {
-        cursor = new Date(DEDUCTION_START_DATE);
-    }
-
-    while (cursor <= now) {
-        if (cursor.getDay() === targetDay) {
-            const dStr = cursor.toLocaleDateString('en-CA');
-            const classEndDateTime = new Date(`${dStr}T${course.end}:00`);
-
-            // 注意：這裡刻意「不」排除 exceptions（請假）的日期 ——
-            // 因為你確認過，臨時請假一樣要扣課
-            if (!isNaN(classEndDateTime.getTime()) && classEndDateTime < now && !deductedDates.includes(dStr)) {
-                newlyDeducted.push(dStr);
-            }
-        }
-        cursor.setDate(cursor.getDate() + 1);
-    }
-
-    if (newlyDeducted.length === 0) return;
-
-    // 依序扣完這幾堂（可能因為好幾天沒開網頁，一次補扣好幾堂）
-    for (const dStr of newlyDeducted) {
-        await deductOneSession(course.name);
-    }
-
-    try {
-        await setDoc(
-            doc(db, "events", course.id.toString()),
-            { deductedDates: [...deductedDates, ...newlyDeducted] },
-            { merge: true }
-        );
-    } catch (err) {
-        console.error("標記重複課程已扣款失敗:", err);
-    }
-}
-
-// 實際去扣 students/{姓名} 的剩餘堂數。
-// 刻意不設下限、允許扣成負數 —— 負數代表這個學生已經超支，
-// 提醒你該找他補買新的課程包了，而不是默默不扣、讓你以為堂數還夠
-async function deductOneSession(studentName) {
-    try {
-        const ref = doc(db, "students", studentName);
-        const snap = await getDoc(ref);
-        const data = snap.exists() ? snap.data() : {};
-        const total = data.totalSessions !== undefined ? data.totalSessions : 10;
-        const remaining = data.remainingSessions !== undefined ? data.remainingSessions : 10;
-        const newRemaining = remaining - 1;
-
-        const patch = { totalSessions: total, remainingSessions: newRemaining };
-
-        // ▼▼▼ 新增：這一堂扣完剛好用完，而且已經有教練確認過的「下一期」方案，
-        // 自動接續啟用，不用教練手動再操作一次 ▼▼▼
-        if (newRemaining <= 0 && data.nextPlan) {
-            const next = data.nextPlan;
-            patch.totalSessions = next.totalSessions;
-            patch.remainingSessions = next.totalSessions;
-            patch.planName = next.planName || `個人一對一 ${next.totalSessions} 堂`;
-            patch.purchaseDate = new Date().toLocaleDateString('en-CA');
-            patch.renewalStatus = 'none';
-            patch.nextPlan = null;
-            console.log(`🔁 [${studentName}] 舊方案用完，自動接續啟用下一期方案（${next.totalSessions} 堂）`);
-        }
-        // ▲▲▲ 新增結束 ▲▲▲
-
-        await setDoc(ref, patch, { merge: true });
-        console.log(`⏱️ 已自動扣除 [${studentName}] 一堂課，剩餘 ${patch.remainingSessions} 堂`);
-
-        // 如果目前正開著學生資料庫畫面、而且剛好展開這個學生，順便更新畫面數字
-        const remainEl = document.getElementById(`remain-${studentName}`);
-        if (remainEl) remainEl.innerText = patch.remainingSessions;
-    } catch (err) {
-        console.error(`自動扣款失敗 [${studentName}]:`, err);
-    }
-}
-// ▲▲▲ 新增結束 ▲▲▲
 
 // ▼▼▼ 修正：改成用「姓名」查詢，不再依賴 studentEmail 欄位。
 // 原因：studentEmail 欄位只有在教練排課「當下」剛好查得到 Email 才會寫入，
@@ -608,6 +410,7 @@ function startStudentLiveSync(studentName) {
     unsubscribe = onSnapshot(q, (snapshot) => {
         const myEvents = [];
         let totalMinutes = 0;
+        let unpaidCount = 0;
 
         const now = new Date();
         const currentYear = now.getFullYear();
@@ -622,50 +425,39 @@ function startStudentLiveSync(studentName) {
                 const courseDate = new Date(data.date);
                 // 只篩選跟今天同一個年月的文件
                 if (courseDate.getFullYear() === currentYear && courseDate.getMonth() === currentMonth) {
-                    // 累加分鐘數 (優先抓 duration，沒有的話用格數算)
+                    
+                    // 1. 累加分鐘數 (優先抓 duration，沒有的話用格數算)
                     const duration = data.duration || ((data.endRow - data.startRow) * 10);
                     totalMinutes += duration;
+
+                    // 2. 統計未繳費堂數
+                    if (data.type === 'work' && data.isPaid !== true) {
+                        unpaidCount++;
+                    }
                 }
             }
         });
-
-        // ▼▼▼ 修正：補上這行。原本這裡從沒更新 window.courses，
-        // 導致摘要卡片的「下次上課時間」永遠抓不到資料，
-        // 不管學生實際上有沒有排課，都只會顯示「目前沒有排定課程」▼▼▼
-        window.courses = myEvents;
-        if (typeof courses !== 'undefined') {
-            courses = myEvents;
-        }
-        // ▲▲▲ 修正結束 ▲▲▲
-
-        // 更新時數顯示
+        // 1. 更新時數顯示
         const hoursEl = document.getElementById('student-total-hours');
         if (hoursEl) hoursEl.innerText = (totalMinutes / 60).toFixed(1);
 
-        // 核心：呼叫原本的行事曆更新函式
+        // 2. 動態更新學生的繳費情形文字與顏色
+        const statusDisplay = document.getElementById('student-class-count');
+        if (statusDisplay) {
+            if (unpaidCount > 0) {
+                statusDisplay.innerText = `有 ${unpaidCount} 堂未繳費`;
+                statusDisplay.style.color = '#e74c3c'; // 紅色
+            } else {
+                statusDisplay.innerText = '已全數繳清 ✨';
+                statusDisplay.style.color = '#098579'; // 專屬綠色
+            }
+        }
+
+        // 3. 核心：呼叫原本的行事曆更新函式
         if (window.updateCalendarUI) {
             console.log("🎨 正在為學生渲染大行事曆...");
             window.updateCalendarUI(myEvents);
         }
-
-        // ▼▼▼ 新增：課表資料一更新，順便重新算一次摘要卡片的「下次上課時間」
-        // （堂數/方案/效期那些欄位由 watchStudentSummaryCard 的獨立監聽負責，
-        // 這裡只需要重繪跟課表有關的那一小塊） ▼▼▼
-        if (currentUser && currentUser.role === 'student') {
-            const nextClassEl = document.getElementById('summary-next-class');
-            if (nextClassEl) {
-                const next = findNextClassForStudent(currentUser.name, myEvents);
-                if (next) {
-                    const d = new Date(`${next.dateStr}T00:00:00`);
-                    const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
-                    const dateLabel = `${d.getMonth() + 1}/${d.getDate()} (${weekDays[d.getDay()]})`;
-                    nextClassEl.innerText = `${dateLabel} ${next.course.start}-${next.course.end} @ ${next.course.loc}`;
-                } else {
-                    nextClassEl.innerText = '目前沒有排定課程';
-                }
-            }
-        }
-        // ▲▲▲ 新增結束 ▲▲▲
     });
 }
 
@@ -677,39 +469,23 @@ window.uploadEvent = async (eventData) => {
             const lastCourse = (window.courses || []).find(c => c.name === eventData.name && c.price);
             currentPrice = lastCourse ? parseInt(lastCourse.price, 10) : 600;
         }
-
+        
+        const studentRef = doc(db, "students", eventData.name); // 假設文件 ID 就是姓名
+        const studentSnap = await getDoc(studentRef);
+        
         let emailToUpload = "";
-
-        // ▼▼▼ 修正：只有「教球」(type === 'work') 才會去讀寫 students collection。
-        // 原因：「上課」「其他行程」是你自己的私人行程，姓名欄位打的通常不是學生姓名
-        // （可能是課名、私事），不應該被誤存進學生資料庫，也不該影響堂數或預設學費。
-        // ⚠️ 提醒：這個修正只擋住「以後」的污染，之前如果已經有非學生的名字被誤存進
-        // students collection，需要你自己去「學生資料庫」畫面用刪除按鈕手動清掉，
-        // 系統沒辦法自動分辨哪些是舊的誤存資料。
-        if (eventData.type === 'work') {
-            const studentRef = doc(db, "students", eventData.name); // 假設文件 ID 就是姓名
-            const studentSnap = await getDoc(studentRef);
-            const existingData = studentSnap.exists() ? studentSnap.data() : {};
-
-            if (existingData.email) {
-                emailToUpload = existingData.email;
-            } else {
-                console.warn(`⚠️ 找不到學生 [${eventData.name}] 的對照 Email，已自動預設為空字串。`);
-            }
-
-            const patch = { defaultPrice: currentPrice };
-            // ▼▼▼ 新增：如果這個學生還沒有堂數欄位，補上預設值 10/10，
-            // 順便當作「這是真的學生」的標記，讓學生資料庫的清單可以用這個欄位過濾掉雜訊 ▼▼▼
-            if (existingData.totalSessions === undefined) {
-                patch.totalSessions = 10;
-                patch.remainingSessions = 10;
-            }
-            // ▲▲▲ 新增結束 ▲▲▲
-
-            await setDoc(studentRef, patch, { merge: true });
-            console.log(`🚀 雲端已記憶 ${eventData.name} 的預設學費為: ${currentPrice} 元`);
+        if (studentSnap.exists() && studentSnap.data().email) {
+            // 找到 Email 了
+            emailToUpload = studentSnap.data().email;
+        } else {
+            console.warn(`⚠️ 找不到學生 [${eventData.name}] 的對照 Email，已自動預設為空字串。`);
         }
-        // ▲▲▲ 修正結束 ▲▲▲
+
+        // 2. 自動記憶機制
+        await setDoc(studentRef, { 
+            defaultPrice: currentPrice 
+        }, { merge: true });
+        console.log(`🚀 雲端已記憶 ${eventData.name} 的預設學費為: ${currentPrice} 元`);
 
         // 3. 儲存到原本的 events 集合
         const eventId = eventData.id.toString();
@@ -808,41 +584,17 @@ async function renderStudentDbPanel() {
         snap.forEach((docSnap) => {
             const data = docSnap.data();
             const name = docSnap.id;
-
-            // ▼▼▼ 新增：過濾掉污染資料。
-            // 真正的學生一定符合這兩個條件其中之一：
-            //   1. totalSessions 有值（曾經被排過教球課程，或被手動新增/自動扣款過）
-            //   2. email 有值（曾經註冊過帳號）
-            // 「上課」「其他」這種私人行程誤存進來的資料，兩者都不會有，會被擋掉。
-            // ⚠️ 例外：如果是「這次修正上線之前」就已經排過教球課、但從來沒被
-            // 編輯/重新儲存過的舊學生，暫時也會被這個過濾器擋住（因為還沒被補上
-            // totalSessions 欄位）。之後只要教練點開他任何一堂課存檔一次，
-            // 或用「＋新增學生」用同樣名字加一次，就會自動補上、重新出現在清單裡。
-            if (data.totalSessions === undefined && !data.email) {
-                return;
-            }
-            // ▲▲▲ 新增結束 ▲▲▲
-
             const emailText = data.email ? data.email : '（尚未註冊帳號）';
             const priceText = data.defaultPrice !== undefined ? `$${data.defaultPrice}` : '—';
             // 【新增】堂數：如果 Firestore 裡還沒有這個欄位，預設顯示 10/10
             const total = data.totalSessions !== undefined ? data.totalSessions : 10;
             const remaining = data.remainingSessions !== undefined ? data.remainingSessions : 10;
 
-            // ▼▼▼ 新增：續約狀態小標籤，教練不用展開每個學生就能看到誰申請了續約 ▼▼▼
-            let renewalBadge = '';
-            if (data.renewalStatus === 'requested') {
-                renewalBadge = ' · <span style="color:#e67e22; font-weight:700;">⏳ 已申請續約</span>';
-            } else if (data.renewalStatus === 'confirmed') {
-                renewalBadge = ' · <span style="color:#098579; font-weight:700;">✅ 已確認續約</span>';
-            }
-            // ▲▲▲ 新增結束 ▲▲▲
-
             rows.push(`
                 <div class="db-row-wrap">
                     <div class="db-row db-row-clickable" onclick="toggleStudentDetail('${name}')">
                         <span class="db-name">▸ ${name}</span>
-                        <span class="db-meta">${emailText} · 預設學費 ${priceText}${renewalBadge}</span>
+                        <span class="db-meta">${emailText} · 預設學費 ${priceText}</span>
                     </div>
                     <div class="db-detail hide" id="detail-${name}">
                         <div class="db-detail-row">
@@ -853,19 +605,11 @@ async function renderStudentDbPanel() {
                                 <button type="button" onclick="adjustSession('${name}', 1)">＋</button>
                             </span>
                         </div>
-                        <div class="db-detail-actions">
-                            <button type="button" class="clear-btn secondary" onclick="setSessionCount('${name}')">✏️ 直接修正堂數</button>
-                            <button type="button" class="clear-btn secondary" onclick="confirmRenewal('${name}')">🔄 確認續約</button>
-                        </div>
                         <button type="button" class="clear-btn" onclick="deleteStudent('${name}')">🗑️ 刪除此學生</button>
                     </div>
                 </div>
             `);
         });
-        if (rows.length === 0) {
-            listEl.innerHTML = '<p class="no-data-hint">目前還沒有學生資料，點右上角「＋ 新增學生」開始建立</p>';
-            return;
-        }
         listEl.innerHTML = rows.join('');
     } catch (err) {
         console.error("讀取學生資料庫失敗:", err);
@@ -903,303 +647,6 @@ window.adjustSession = async function (name, delta) {
         alert("更新失敗，請重新整理再試一次");
     }
 };
-
-// ▼▼▼ 新增：直接輸入正確的堂數（不設範圍限制），
-// 專門用來修正被 bug 扣壞掉的數字（例如 -800），不用一直按 + 按到手痠
-window.setSessionCount = async function (name) {
-    try {
-        const ref = doc(db, "students", name);
-        const snap = await getDoc(ref);
-        const data = snap.exists() ? snap.data() : {};
-        const currentTotal = data.totalSessions !== undefined ? data.totalSessions : 10;
-        const currentRemaining = data.remainingSessions !== undefined ? data.remainingSessions : 10;
-
-        const newTotalInput = prompt(`[${name}] 總堂數（例如買了幾堂）：`, currentTotal);
-        if (newTotalInput === null) return; // 按取消
-        const newTotal = parseInt(newTotalInput, 10);
-        if (isNaN(newTotal)) { alert("請輸入數字"); return; }
-
-        const newRemainingInput = prompt(`[${name}] 剩餘堂數：`, currentRemaining);
-        if (newRemainingInput === null) return;
-        const newRemaining = parseInt(newRemainingInput, 10);
-        if (isNaN(newRemaining)) { alert("請輸入數字"); return; }
-
-        await setDoc(ref, { totalSessions: newTotal, remainingSessions: newRemaining }, { merge: true });
-
-        const remainEl = document.getElementById(`remain-${name}`);
-        const totalEl = document.getElementById(`total-${name}`);
-        if (remainEl) remainEl.innerText = newRemaining;
-        if (totalEl) totalEl.innerText = newTotal;
-
-        alert(`✅ 已將 [${name}] 的堂數修正為 ${newRemaining} / ${newTotal}`);
-    } catch (err) {
-        console.error("修正堂數失敗:", err);
-        alert("修正失敗，請重新整理再試一次");
-    }
-};
-
-// ▼▼▼ 新增：教練確認學生續約，設定「下一期」方案，用完目前的堂數會自動接續啟用 ▼▼▼
-window.confirmRenewal = async function (name) {
-    const sessionsInput = prompt(`為 [${name}] 設定「下一期」方案的堂數：`, "10");
-    if (sessionsInput === null) return;
-    const sessions = parseInt(sessionsInput, 10);
-    if (isNaN(sessions) || sessions <= 0) {
-        alert("請輸入正確的堂數");
-        return;
-    }
-
-    try {
-        await setDoc(doc(db, "students", name), {
-            nextPlan: { totalSessions: sessions, planName: `個人一對一 ${sessions} 堂` },
-            renewalStatus: 'confirmed'
-        }, { merge: true });
-        alert(`✅ 已為 [${name}] 記錄續約：下一期方案 ${sessions} 堂，將於目前方案用完後自動啟用`);
-        renderStudentDbPanel();
-    } catch (err) {
-        console.error("確認續約失敗:", err);
-        alert("設定失敗，請稍後再試");
-    }
-};
-// ▲▲▲ 新增結束 ▲▲▲
-
-// ------------------------------------------------------------
-// ▼▼▼ 新增：學生端首頁的重點摘要卡片
-// ------------------------------------------------------------
-const VALIDITY_MONTHS_DEFAULT = 4;
-
-// 在學生自己的課表裡，找出最近一次「還沒發生」的教球課程
-function findNextClassForStudent(studentName, allCourses) {
-    const now = new Date();
-    const candidates = [];
-
-    (allCourses || []).forEach((course) => {
-        if (!course || course.type !== 'work' || course.name !== studentName) return;
-
-        if (course.isRepeating) {
-            const targetDay = (course.day === "8" ? 0 : parseInt(course.day) - 1);
-            const exceptions = course.exceptions || [];
-
-            // 往後找 14 天內，符合星期幾、沒有被請假標記的最近一次
-            for (let i = 0; i <= 14; i++) {
-                const d = new Date(now);
-                d.setDate(d.getDate() + i);
-                if (d.getDay() !== targetDay) continue;
-
-                const dStr = d.toLocaleDateString('en-CA');
-                if (exceptions.includes(dStr)) continue;
-
-                const startDateTime = new Date(`${dStr}T${course.start}:00`);
-                if (startDateTime > now) {
-                    candidates.push({ course, dateStr: dStr, startDateTime });
-                }
-                break; // 這個重複課程只需要找最近的一次，找到（或跳過請假）就停止往後找
-            }
-        } else {
-            if (!course.date || !course.start) return;
-            const startDateTime = new Date(`${course.date}T${course.start}:00`);
-            if (startDateTime > now) {
-                candidates.push({ course, dateStr: course.date, startDateTime });
-            }
-        }
-    });
-
-    if (candidates.length === 0) return null;
-    candidates.sort((a, b) => a.startDateTime - b.startDateTime);
-    return candidates[0];
-}
-
-// 學生自己點「聯繫教練付款續約」：只會通知教練，不會自動完成付款
-window.requestRenewal = async function () {
-    if (!currentUser || !currentUser.name) return;
-    const sure = confirm("即將通知教練你想續約付款，教練會盡快跟你聯繫確認付款事宜，確定要送出嗎？");
-    if (!sure) return;
-
-    try {
-        await setDoc(doc(db, "students", currentUser.name), { renewalStatus: 'requested' }, { merge: true });
-        alert("✅ 已通知教練，教練會盡快跟你聯繫付款事宜！");
-        // 這裡不用手動呼叫任何渲染函式：watchStudentSummaryCard 建立的即時監聽
-        // 會偵測到剛剛這筆 Firestore 寫入，自動重新渲染卡片
-    } catch (err) {
-        console.error("送出續約請求失敗:", err);
-        alert("送出失敗，請稍後再試，或直接私訊教練");
-    }
-};
-
-// ▼▼▼ 修改：改成即時監聽版本，教練那邊調整堂數/確認續約後，
-// 學生畫面不用重新整理就會自動更新 ▼▼▼
-let unsubscribeStudentSummary = null;
-
-function watchStudentSummaryCard(studentName) {
-    if (unsubscribeStudentSummary) {
-        unsubscribeStudentSummary();
-        unsubscribeStudentSummary = null;
-    }
-    if (!currentUser || currentUser.role !== 'student' || !studentName) return;
-
-    const ref = doc(db, "students", studentName);
-    unsubscribeStudentSummary = onSnapshot(
-        ref,
-        async (snap) => {
-            let data = snap.exists() ? snap.data() : {};
-
-            // 補齊舊資料缺少的欄位，並寫回 Firestore，讓效期計算有穩定的起點。
-            // 這裡寫回去會讓 onSnapshot 再觸發一次，但因為欄位都補齊了，
-            // 下一輪不會再進到這個 if，所以不會無限循環。
-            const patch = {};
-            if (data.purchaseDate === undefined) patch.purchaseDate = new Date().toLocaleDateString('en-CA');
-            if (data.validityMonths === undefined) patch.validityMonths = VALIDITY_MONTHS_DEFAULT;
-            if (data.renewalStatus === undefined) patch.renewalStatus = 'none';
-            if (Object.keys(patch).length > 0) {
-                await setDoc(ref, patch, { merge: true });
-                return;
-            }
-
-            renderStudentSummaryFromData(data);
-        },
-        (err) => console.error("監聽學生摘要資料失敗:", err)
-    );
-}
-
-function renderStudentSummaryFromData(data) {
-    try {
-        const total = data.totalSessions !== undefined ? data.totalSessions : 10;
-        const remaining = data.remainingSessions !== undefined ? data.remainingSessions : 10;
-        const planName = data.planName || `個人一對一 ${total} 堂`;
-        const renewalStatus = data.renewalStatus || 'none';
-        const nextPlan = data.nextPlan || null;
-
-        // --- 方案名稱 ---
-        const planNameEl = document.getElementById('summary-plan-name');
-        if (planNameEl) planNameEl.innerText = planName;
-
-        // --- 堂數數字 + 進度條 ---
-        const numberEl = document.getElementById('summary-sessions-number');
-        if (numberEl) numberEl.innerText = `${remaining}/${total}`;
-
-        const percent = total > 0 ? Math.max(0, Math.min(100, (remaining / total) * 100)) : 0;
-        const fillEl = document.getElementById('summary-progress-fill');
-        const statusTextEl = document.getElementById('summary-sessions-status');
-        const renewalBtn = document.getElementById('summary-renewal-btn');
-        const renewalTag = document.getElementById('summary-renewal-tag');
-
-        if (fillEl) {
-            fillEl.style.width = `${percent}%`;
-            fillEl.className = 'progress-bar-fill';
-        }
-        if (renewalTag) {
-            renewalTag.classList.add('hide');
-            renewalTag.innerText = '';
-        }
-        if (renewalBtn) {
-            renewalBtn.classList.add('hide');
-            renewalBtn.disabled = false;
-        }
-
-        if (remaining <= 0) {
-            // 已完課
-            if (fillEl) fillEl.classList.add('progress-gray');
-            if (statusTextEl) {
-                statusTextEl.innerHTML = '已完課';
-                statusTextEl.className = 'sessions-status-text status-gray';
-            }
-        } else if (remaining <= 2) {
-            // 即將完課
-            if (fillEl) fillEl.classList.add('progress-orange');
-
-            if (renewalStatus === 'confirmed' && nextPlan) {
-                // 已經確認續約
-                if (renewalTag) {
-                    renewalTag.classList.remove('hide');
-                    renewalTag.innerText = `✅ 新方案已續約（剩 ${remaining} 堂切換）`;
-                    renewalTag.className = 'renewal-tag tag-green';
-                }
-                if (statusTextEl) {
-                    const nextPlanName = nextPlan.planName || `個人一對一 ${nextPlan.totalSessions} 堂`;
-                    statusTextEl.innerHTML = `即將完課<br><small>下期方案「${nextPlanName}」已預付成功，將於目前方案結束後自動啟用。</small>`;
-                    statusTextEl.className = 'sessions-status-text status-orange';
-                }
-                if (renewalBtn) {
-                    renewalBtn.classList.remove('hide');
-                    renewalBtn.innerText = '已完成續約';
-                    renewalBtn.disabled = true;
-                    renewalBtn.className = 'renewal-btn renewal-btn-done';
-                }
-            } else if (renewalStatus === 'requested') {
-                if (statusTextEl) {
-                    statusTextEl.innerText = '即將完課';
-                    statusTextEl.className = 'sessions-status-text status-orange';
-                }
-                if (renewalBtn) {
-                    renewalBtn.classList.remove('hide');
-                    renewalBtn.innerText = '已通知教練，等待確認中…';
-                    renewalBtn.disabled = true;
-                    renewalBtn.className = 'renewal-btn renewal-btn-pending';
-                }
-            } else {
-                if (statusTextEl) {
-                    statusTextEl.innerText = '即將完課';
-                    statusTextEl.className = 'sessions-status-text status-orange';
-                }
-                if (renewalBtn) {
-                    renewalBtn.classList.remove('hide');
-                    renewalBtn.innerText = '聯繫教練付款續約';
-                    renewalBtn.disabled = false;
-                    renewalBtn.className = 'renewal-btn renewal-btn-active';
-                }
-            }
-        } else {
-            // 額度充足
-            if (fillEl) fillEl.classList.add('progress-green');
-            if (statusTextEl) {
-                statusTextEl.innerText = '額度充足';
-                statusTextEl.className = 'sessions-status-text status-green';
-            }
-        }
-
-        // --- 下次上課時間 ---
-        const nextClassEl = document.getElementById('summary-next-class');
-        if (nextClassEl) {
-            const next = findNextClassForStudent(currentUser.name, window.courses || []);
-            if (next) {
-                const d = new Date(`${next.dateStr}T00:00:00`);
-                const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
-                const dateLabel = `${d.getMonth() + 1}/${d.getDate()} (${weekDays[d.getDay()]})`;
-                nextClassEl.innerText = `${dateLabel} ${next.course.start}-${next.course.end} @ ${next.course.loc}`;
-            } else {
-                nextClassEl.innerText = '目前沒有排定課程';
-            }
-        }
-
-        // --- 課程效期 ---
-        const expiryEl = document.getElementById('summary-expiry');
-        if (expiryEl) {
-            const purchaseDate = new Date(`${data.purchaseDate}T00:00:00`);
-            const validityMonths = data.validityMonths !== undefined ? data.validityMonths : VALIDITY_MONTHS_DEFAULT;
-            const expiryDate = new Date(purchaseDate);
-            expiryDate.setMonth(expiryDate.getMonth() + validityMonths);
-
-            const now = new Date();
-            const diffDays = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24));
-            const expiryDateLabel = `${expiryDate.getFullYear()}/${expiryDate.getMonth() + 1}/${expiryDate.getDate()}`;
-
-            expiryEl.classList.remove('status-green', 'status-orange', 'status-gray');
-            if (diffDays <= 0) {
-                expiryEl.innerText = `已到期（${expiryDateLabel}）`;
-                expiryEl.classList.add('status-gray');
-            } else if (diffDays <= 14) {
-                expiryEl.innerText = `剩 ${diffDays} 天到期（${expiryDateLabel}）`;
-                expiryEl.classList.add('status-orange');
-            } else {
-                expiryEl.innerText = `剩 ${diffDays} 天到期（${expiryDateLabel}）`;
-                expiryEl.classList.add('status-green');
-            }
-        }
-    } catch (err) {
-        console.error("渲染學生摘要卡片失敗:", err);
-    }
-}
-// ▲▲▲ 新增結束 ▲▲▲
-// ▲▲▲ 新增結束 ▲▲▲
 
 // 新增學生：只需要姓名，堂數預設 10/10，之後學生自己註冊時 Email 會自動補上去
 window.addStudent = async function () {
