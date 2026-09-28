@@ -1,7 +1,7 @@
 // app.js
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
 import { 
-    getFirestore, collection, query, where, getDocs, onSnapshot, setDoc, doc, deleteDoc, getDoc
+    getFirestore, collection, query, where, getDocs, onSnapshot, setDoc, doc, deleteDoc, getDoc, increment 
 } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { 
     getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, 
@@ -421,27 +421,54 @@ function startLiveSync() {
 // ------------------------------------------------------------
 const DEDUCTION_START_DATE = new Date('2027-01-01T00:00:00');
 
+let isDeducting = false; // 防鎖機制：避免多重連動導致重複執行
+
 async function checkAndDeductPastSessions(events) {
     const now = new Date();
-    if (now < DEDUCTION_START_DATE) {
-        // 還沒到生效日期，完全不檢查、不扣款
-        return;
-    }
+    if (now < DEDUCTION_START_DATE) return;
+    if (isDeducting) return; // 正在扣款中直接跳過，防重複觸發
 
-    for (const course of events) {
-        if (!course || course.type !== 'work' || !course.name || !course.end) continue;
+    isDeducting = true;
+    try {
+        for (const course of events) {
+            if (!course || course.type !== 'work' || !course.name || !course.end) continue;
 
-        try {
             if (course.isRepeating) {
                 await deductRepeatingCourse(course, now);
             } else {
                 await deductOneTimeCourse(course, now);
             }
-        } catch (err) {
-            console.error(`檢查課程 [${course.name}] 的扣款狀態時發生錯誤:`, err);
         }
+    } catch (err) {
+        console.error("檢查扣款過程發生錯誤:", err);
+    } finally {
+        isDeducting = false; // 執行完成後解鎖
     }
 }
+
+async function deductOneSession(studentName) {
+    try {
+        const ref = doc(db, "students", studentName);
+        
+        // 使用 Firebase increment(-1) 安全扣堂，避免 Race Condition
+        await setDoc(ref, { 
+            remainingSessions: increment(-1) 
+        }, { merge: true });
+
+        console.log(`⏱️ 已自動扣除 [${studentName}] 1 堂課`);
+
+        // 重新讀取最新的堂數更新 UI
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+            const newRemaining = snap.data().remainingSessions;
+            const remainEl = document.getElementById(`remain-${studentName}`);
+            if (remainEl) remainEl.innerText = newRemaining;
+        }
+    } catch (err) {
+        console.error(`自動扣款失敗 [${studentName}]:`, err);
+    }
+}
+
 
 // 單次課程：時間過了、還沒標記扣過款，就扣一堂並標記
 async function deductOneTimeCourse(course, now) {
@@ -507,40 +534,12 @@ async function deductRepeatingCourse(course, now) {
     }
 }
 
-// 實際去扣 students/{姓名} 的剩餘堂數。
-// 刻意不設下限、允許扣成負數 —— 負數代表這個學生已經超支，
-// 提醒你該找他補買新的課程包了，而不是默默不扣、讓你以為堂數還夠
-async function deductOneSession(studentName) {
-    try {
-        const ref = doc(db, "students", studentName);
-        const snap = await getDoc(ref);
-        const data = snap.exists() ? snap.data() : {};
-        const total = data.totalSessions !== undefined ? data.totalSessions : 10;
-        const remaining = data.remainingSessions !== undefined ? data.remainingSessions : 10;
-        const newRemaining = remaining - 1;
 
-        await setDoc(ref, { totalSessions: total, remainingSessions: newRemaining }, { merge: true });
-        console.log(`⏱️ 已自動扣除 [${studentName}] 一堂課，剩餘 ${newRemaining} 堂`);
-
-        // 如果目前正開著學生資料庫畫面、而且剛好展開這個學生，順便更新畫面數字
-        const remainEl = document.getElementById(`remain-${studentName}`);
-        if (remainEl) remainEl.innerText = newRemaining;
-    } catch (err) {
-        console.error(`自動扣款失敗 [${studentName}]:`, err);
-    }
-}
-// ▲▲▲ 新增結束 ▲▲▲
-
-// ▼▼▼ 修正：改成用「姓名」查詢，不再依賴 studentEmail 欄位。
-// 原因：studentEmail 欄位只有在教練排課「當下」剛好查得到 Email 才會寫入，
-// 如果學生是排課之後才註冊，舊的行程會永遠找不到 studentEmail，等於課表消失。
-// 改用姓名查詢後，不管註冊先後順序，只要姓名對得上就抓得到。
 function startStudentLiveSync(studentName) {
     console.log(`🔒學生模式：正在同步 [${studentName}] 的課程...`);
     if (unsubscribe) unsubscribe();
 
     if (!studentName) {
-        // 還沒找到對應姓名（例如剛註冊、教練還沒排過課），顯示空課表即可
         if (window.updateCalendarUI) window.updateCalendarUI([]);
         return;
     }
@@ -549,6 +548,7 @@ function startStudentLiveSync(studentName) {
         collection(db, "events"), 
         where("name", "==", studentName)
     );
+    
     unsubscribe = onSnapshot(q, (snapshot) => {
         const myEvents = [];
         let totalMinutes = 0;
@@ -556,48 +556,69 @@ function startStudentLiveSync(studentName) {
 
         const now = new Date();
         const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth();
+        const currentMonth = now.getMonth() + 1; // 1 ~ 12 月
 
-        snapshot.forEach((doc) => {
-            const data = doc.data();
-            myEvents.push({ ...data, id: data.id ? data.id.toString() : doc.id });
+        snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            myEvents.push({ ...data, id: data.id ? data.id.toString() : docSnap.id });
 
-            // 計算時數邏輯
-            if (data.date) {
-                const courseDate = new Date(data.date);
-                // 只篩選跟今天同一個年月的文件
-                if (courseDate.getFullYear() === currentYear && courseDate.getMonth() === currentMonth) {
-                    
-                    // 1. 累加分鐘數 (優先抓 duration，沒有的話用格數算)
-                    const duration = data.duration || ((data.endRow - data.startRow) * 10);
-                    totalMinutes += duration;
+            // A. 單次課程統計 (精確用字串拆解年/月，避免 UTC 時區偏差)
+            if (data.date && !data.isRepeating) {
+                const parts = data.date.split('-');
+                if (parts.length === 3) {
+                    const y = parseInt(parts[0], 10);
+                    const m = parseInt(parts[1], 10);
 
-                    // 2. 統計未繳費堂數
-                    if (data.type === 'work' && data.isPaid !== true) {
-                        unpaidCount++;
+                    if (y === currentYear && m === currentMonth) {
+                        // ⚠️ 備用估算：若無 duration，請確認 (endRow - startRow) * 分鐘數 是否符合你的行事曆（預設以 15 分鐘/格計算）
+                        const duration = data.duration || ((data.endRow - data.startRow) * 15) || 60;
+                        totalMinutes += Number(duration);
+
+                        if (data.type === 'work' && data.isPaid !== true) {
+                            unpaidCount++;
+                        }
                     }
+                }
+            } 
+            // B. 重複課程統計 (動態計算 4 次或 5 次，解決少算 2 小時的問題)
+            else if (data.isRepeating && data.day) {
+                const targetDay = (data.day === "8" ? 0 : parseInt(data.day, 10) - 1);
+                
+                // 計算當月實際堂數
+                const realClassCount = countOccurrencesInMonth(
+                    currentYear, 
+                    currentMonth, 
+                    targetDay, 
+                    data.exceptions || []
+                );
+
+                const singleDuration = data.duration || ((data.endRow - data.startRow) * 15) || 60;
+                totalMinutes += Number(singleDuration) * realClassCount;
+
+                if (data.type === 'work' && data.isPaid !== true) {
+                    unpaidCount += realClassCount;
                 }
             }
         });
-        // 1. 更新時數顯示
+
+        // 1. 更新小時顯示
         const hoursEl = document.getElementById('student-total-hours');
         if (hoursEl) hoursEl.innerText = (totalMinutes / 60).toFixed(1);
 
-        // 2. 動態更新學生的繳費情形文字與顏色
+        // 2. 更新未繳費/結清狀態顯示
         const statusDisplay = document.getElementById('student-class-count');
         if (statusDisplay) {
             if (unpaidCount > 0) {
                 statusDisplay.innerText = `有 ${unpaidCount} 堂未繳費`;
-                statusDisplay.style.color = '#e74c3c'; // 紅色
+                statusDisplay.style.color = '#e74c3c';
             } else {
                 statusDisplay.innerText = '已全數繳清 ✨';
-                statusDisplay.style.color = '#098579'; // 專屬綠色
+                statusDisplay.style.color = '#098579';
             }
         }
 
-        // 3. 核心：呼叫原本的行事曆更新函式
+        // 3. 渲染行事曆 UI
         if (window.updateCalendarUI) {
-            console.log("🎨 正在為學生渲染大行事曆...");
             window.updateCalendarUI(myEvents);
         }
     });

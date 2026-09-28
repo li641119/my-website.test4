@@ -9,6 +9,24 @@ const presetColors = [
     '#ffc0c7', '#f5c5ff', '#b2ceff', '#c4cbff'
 ];
 
+/** 🛠️ 關鍵新增：計算指定年份與月份中，某個星期幾總共出現了幾次 (自動判斷 4 次或 5 次並扣除 exceptions) */
+function countOccurrencesInMonth(year, month, targetDay, exceptions = []) {
+    // 取得該月總天數 (month 傳入 1~12，Date 的第 0 天即為上個月最後一天，亦即當月總天數)
+    const totalDays = new Date(year, month, 0).getDate(); 
+    let count = 0;
+
+    for (let day = 1; day <= totalDays; day++) {
+        const currentDate = new Date(year, month - 1, day);
+        if (currentDate.getDay() === targetDay) {
+            const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            if (!exceptions.includes(dateStr)) {
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
 // 在 cal-gemini.js 中
 window.updateCalendarUI = function(cloudEvents) {
     try {
@@ -190,7 +208,6 @@ function saveFromModal() {
     const end = document.getElementById('m-end').value;
     const isRepeating = document.getElementById('m-repeat').checked;
     
-    // 優先抓取輸入框金額，若空則尋找該學生最近一次的歷史學費，最後才 fallback 600
     const priceInputVal = document.getElementById('m-price').value;
     let price = parseInt(priceInputVal, 10);
 
@@ -203,13 +220,13 @@ function saveFromModal() {
     
     if (!name || !start || !end) return alert("請填寫完整資訊");
 
-    // 【修正 3】：優先拿色盤選擇的顏色，若無才 fallback 學生既有顏色或預設灰色
     const selectedColorVal = document.getElementById('m-color')?.value;
     const existingStudent = currentCourses.find(c => c.name === name && c.color);
     const eventColor = selectedColorVal || (existingStudent ? existingStudent.color : '#c2bcbc'); 
         
     const startRow = timeToRow(start);
     const endRow = timeToRow(end);
+    // 預設計算單堂分鐘數
     const duration = (endRow - startRow) * 10;
 
     if (isNaN(startRow) || isNaN(endRow)) return;
@@ -221,7 +238,6 @@ function saveFromModal() {
     });
     if (hasConflict && !confirm(`⚠️ 時段與 [${hasConflict.name}] 衝突，確定要排入嗎？`)) return;
 
-    // 計算日期
     const dayHeaders = document.querySelectorAll('.day-header');
     const targetHeader = Array.from(dayHeaders).find(h => h.dataset.day === (day === "8" ? "0" : (parseInt(day)-1).toString()) );
     const dateStr = targetHeader ? targetHeader.dataset.fullDate : new Date().toLocaleDateString('en-CA');
@@ -246,13 +262,18 @@ function saveFromModal() {
     console.log("📤 準備上傳:", courseData);
 
     if (typeof window.uploadEvent === 'function') {
-        window.uploadEvent(courseData); // 呼叫 app.js 的功能
+        window.uploadEvent(courseData);
     }
 
     closeModal();
 }
 
-// --- 4. 核心渲染 (整合全月與本週統計) ---
+// ------------------------------------------------------------
+// ▼▼▼ 修正：核心全月統計 (精準計算第 5 個星期幾與時數)
+// ------------------------------------------------------------
+// ------------------------------------------------------------
+// 🛠️ 修正版：核心全月統計 (防重複累加、互斥判斷)
+// ------------------------------------------------------------
 function calculateMonthlyData(targetYear, targetMonth) {
     let totalMinutes = 0;
     let totalIncome = 0; 
@@ -261,54 +282,62 @@ function calculateMonthlyData(targetYear, targetMonth) {
     const currentCourses = window.courses || courses || [];
 
     currentCourses.forEach(course => {
-        if (!course || course.type !== 'work') return;
+        if (!course || course.type !== 'work' || !course.name) return;
 
-        // 保底時薪判斷
         const hourlyRate = course.price !== undefined ? Number(course.price) : 600;
+        
+        // 🔒 精確抓取單堂分鐘數：優先用 duration (若 > 0)，否則才用格數計算
+        let singleDuration = Number(course.duration);
+        if (isNaN(singleDuration) || singleDuration <= 0) {
+            singleDuration = ((course.endRow - course.startRow) * 15) || 60;
+        }
 
-        if (course.isRepeating) {
-            let d = new Date(targetYear, targetMonth, 1);
-            while (d.getMonth() === targetMonth) {
-                const dDay = d.getDay();
-                const tDay = (course.day === "8" ? 0 : parseInt(course.day) - 1);
-                const dStr = d.toLocaleDateString('en-CA');
+        let occurrences = 0;
 
-                if (dDay === tDay && (!course.exceptions || !course.exceptions.includes(dStr))) {
-                    const duration = Number(course.duration || 0);
-                    const currentEventIncome = (duration / 60) * hourlyRate; 
-                    
-                    totalMinutes += duration;
-                    totalIncome += currentEventIncome;
-
-                    if (!studentStats[course.name]) {
-                        studentStats[course.name] = { mins: 0, money: 0 };
-                    }
-                    studentStats[course.name].mins += duration;
-                    studentStats[course.name].money += currentEventIncome;
-                }
-                d.setDate(d.getDate() + 1);
-            }
-        } else {
-            if (course.date) {
-                const p = course.date.split('-');
-                if (parseInt(p[0]) === targetYear && (parseInt(p[1]) - 1) === targetMonth) {
-                    const duration = Number(course.duration || 0);
-                    const currentEventIncome = (duration / 60) * hourlyRate; 
-
-                    totalMinutes += duration;
-                    totalIncome += currentEventIncome;
-
-                    if (!studentStats[course.name]) {
-                        studentStats[course.name] = { mins: 0, money: 0 };
-                    }
-                    studentStats[course.name].mins += duration;
-                    studentStats[course.name].money += currentEventIncome;
+        // 🔒 嚴格互斥判斷：如果是「重複課程」，就「絕對只算」重複課程的堂數，完全不看 date 欄位
+        if (course.isRepeating && course.day) {
+            const targetDay = (course.day === "8" ? 0 : parseInt(course.day, 10) - 1);
+            occurrences = countOccurrencesInMonth(
+                targetYear, 
+                targetMonth + 1, // targetMonth 是 0~11，傳給 helper 需要 1~12
+                targetDay, 
+                course.exceptions || []
+            );
+        } 
+        // 🔒 只有在「不是重複課程」時，才進入單次課程判斷
+        else if (course.date) {
+            const normDate = course.date.replace(/\//g, '-');
+            const parts = normDate.split('-');
+            if (parts.length === 3) {
+                const y = parseInt(parts[0], 10);
+                const m = parseInt(parts[1], 10) - 1; // 轉為 0~11
+                if (y === targetYear && m === targetMonth) {
+                    occurrences = 1;
                 }
             }
         }
+
+        // 只有次數 > 0 才進行累加
+        if (occurrences > 0) {
+            const courseTotalMins = singleDuration * occurrences;
+            const courseTotalIncome = (courseTotalMins / 60) * hourlyRate;
+
+            totalMinutes += courseTotalMins;
+            totalIncome += courseTotalIncome;
+
+            if (!studentStats[course.name]) {
+                studentStats[course.name] = { mins: 0, money: 0 };
+            }
+            studentStats[course.name].mins += courseTotalMins;
+            studentStats[course.name].money += courseTotalIncome;
+        }
     });
+
     return { totalMinutes, totalIncome, studentStats };
 }
+
+// 記得掛載到 window 上供除錯與調用
+window.calculateMonthlyData = calculateMonthlyData;
 
 window.updateStats = function() {
     console.log("📊 [updateStats] 收到重新計算統計的請求");
@@ -316,56 +345,238 @@ window.updateStats = function() {
 }
 
 // ------------------------------------------------------------
-// ▼▼▼ 新增：本月收入畫面的渲染函式
-// 直接沿用 calculateMonthlyData（跟側邊欄用的是同一份計算邏輯，數字一定會對得起來），
-// 只是把結果畫到新的「本月收入」畫面上，不是側邊欄。
-// 「本月」的定義跟側邊欄一致：以目前行事曆瀏覽到的那一週為準，不是今天的實際月份。
+// ▼▼▼ 新增：本月收入「學生收款狀態」管理
 // ------------------------------------------------------------
-export function renderIncomePanel() {
+
+// 取得某個月份的收款紀錄
+function getIncomePaidKey(year, month, studentName) {
+    return `income-paid-${year}-${month + 1}-${studentName}`;
+}
+
+// 取得學生本月是否已收款
+function getIncomePaidStatus(year, month, studentName) {
+    return localStorage.getItem(
+        getIncomePaidKey(year, month, studentName)
+    ) === 'true';
+}
+
+// 更新學生本月收款狀態
+window.toggleIncomePaid = function(studentName, checked) {
+
     const year = viewDate.getFullYear();
     const month = viewDate.getMonth();
+
+    localStorage.setItem(
+        getIncomePaidKey(year, month, studentName),
+        checked ? 'true' : 'false'
+    );
+
+    // 重新渲染收入列表
+    renderIncomePanel();
+};
+
+// ▲▲▲ 新增結束
+// ------------------------------------------------------------
+
+
+// ------------------------------------------------------------
+// ▼▼▼ 修改：本月收入面板
+// 加入「已收款 / 待收款」自動計算
+// ------------------------------------------------------------
+
+export function renderIncomePanel() {
+
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+
     const monthData = calculateMonthlyData(year, month);
 
-    const hoursEl = document.getElementById('income-panel-total-hours');
-    if (hoursEl) hoursEl.innerText = `${(monthData.totalMinutes / 60).toFixed(1)} 小時`;
+    // --------------------------------------------------------
+    // 1. 本月總時數
+    // --------------------------------------------------------
 
-    const incomeEl = document.getElementById('income-panel-total-income');
-    if (incomeEl) incomeEl.innerText = `$${Math.round(monthData.totalIncome).toLocaleString()}`;
+    const hoursEl =
+        document.getElementById('income-panel-total-hours');
 
-    const breakdownEl = document.getElementById('income-panel-breakdown');
+    if (hoursEl) {
+        hoursEl.innerText =
+            `${(monthData.totalMinutes / 60).toFixed(1)} 小時`;
+    }
+
+
+    // --------------------------------------------------------
+    // 2. 本月總收入
+    // --------------------------------------------------------
+
+    const incomeEl =
+        document.getElementById('income-panel-total-income');
+
+    if (incomeEl) {
+        incomeEl.innerText =
+            `$${Math.round(monthData.totalIncome).toLocaleString()}`;
+    }
+
+
+    // --------------------------------------------------------
+    // ▼▼▼ 3. 新增：計算已收款 / 待收款
+    // --------------------------------------------------------
+
+    let paidIncome = 0;
+    let pendingIncome = 0;
+
+    Object.entries(monthData.studentStats).forEach(
+        ([name, data]) => {
+
+            const isPaid = getIncomePaidStatus(
+                year,
+                month,
+                name
+            );
+
+            if (isPaid) {
+
+                paidIncome += data.money;
+
+            } else {
+
+                pendingIncome += data.money;
+
+            }
+
+        }
+    );
+
+
+    // 已收款
+    const paidIncomeEl =
+        document.getElementById('income-panel-paid-income');
+
+    if (paidIncomeEl) {
+
+        paidIncomeEl.innerText =
+            `$${Math.round(paidIncome).toLocaleString()}`;
+
+    }
+
+
+    // 待收款
+    const pendingIncomeEl =
+        document.getElementById('income-panel-pending-income');
+
+    if (pendingIncomeEl) {
+
+        pendingIncomeEl.innerText =
+            `$${Math.round(pendingIncome).toLocaleString()}`;
+
+    }
+
+    // ▲▲▲ 3. 新增結束
+    // --------------------------------------------------------
+
+
+    // --------------------------------------------------------
+    // 4. 學生收入分項
+    // --------------------------------------------------------
+
+    const breakdownEl =
+        document.getElementById('income-panel-breakdown');
+
     if (!breakdownEl) return;
 
-    const entries = Object.entries(monthData.studentStats).sort((a, b) => b[1].money - a[1].money);
+
+    const entries =
+        Object.entries(monthData.studentStats)
+        .sort((a, b) => b[1].money - a[1].money);
+
+
     if (entries.length === 0) {
-        breakdownEl.innerHTML = '<p class="no-data-hint">本月尚無教球紀錄</p>';
+
+        breakdownEl.innerHTML =
+            '<p class="no-data-hint">本月尚無教球紀錄</p>';
+
         return;
     }
 
-    breakdownEl.innerHTML = entries.map(([name, data]) => `
-        <div class="db-row">
-            <span class="db-name">${name}</span>
-            <span class="db-meta">${(data.mins / 60).toFixed(1)} 小時 · $${Math.round(data.money).toLocaleString()}</span>
-        </div>
-    `).join('');
-}
-window.renderIncomePanel = renderIncomePanel;
-// ▲▲▲ 新增結束 ▲▲▲
 
-// --- 5. 繪製行程方塊 (修正刪除與顏色套用邏輯) ---
+    // --------------------------------------------------------
+    // 5. 產生學生列表
+    // --------------------------------------------------------
+
+    breakdownEl.innerHTML = entries.map(
+        ([name, data]) => {
+
+            const isPaid =
+                getIncomePaidStatus(
+                    year,
+                    month,
+                    name
+                );
+
+
+            // 防止學生姓名中的特殊字元破壞 onclick
+            const safeName =
+                name
+                    .replace(/\\/g, '\\\\')
+                    .replace(/'/g, "\\'");
+
+
+            return `
+
+                <div class="db-row income-student-row ${isPaid ? 'is-paid' : ''}">
+
+                    <label class="income-paid-checkbox">
+
+                        <input
+                            type="checkbox"
+                            ${isPaid ? 'checked' : ''}
+                            onchange="toggleIncomePaid('${safeName}', this.checked)"
+                        >
+
+                        <span>已收款</span>
+
+                    </label>
+
+
+                    <span class="db-name">
+                        ${name}
+                    </span>
+
+
+                    <span class="db-meta">
+                        ${(data.mins / 60).toFixed(1)} 小時
+                        ·
+                        $${Math.round(data.money).toLocaleString()}
+                    </span>
+
+                </div>
+
+            `;
+
+        }
+    ).join('');
+
+}
+
+// ▲▲▲ 修改結束
+// ------------------------------------------------------------
+
+
+window.renderIncomePanel = renderIncomePanel;
+
+// --- 5. 繪製行程方塊 ---
 function drawEvent(course, container, dStr, col, overlapCount = 1) {
     const div = document.createElement('div');
     div.className = 'placed-event';
     if (overlapCount > 1) {
-        div.classList.add('is-duplicate'); // 供 CSS 自訂邊框警示
+        div.classList.add('is-duplicate');
     }
 
     const currentCourses = window.courses || courses || [];
     const latestStudentData = currentCourses.find(c => c.name === course.name && c.color);
     
-    // 【修正 2】：使用正確計算出來的 currentColor，修復側邊欄改色後卡片顏色不更新問題
     const currentColor = latestStudentData ? latestStudentData.color : (course.color || '#828181');
     div.style.backgroundColor = currentColor;
-    div.style.position = 'relative'; // 確保徽章可定位於右下角
+    div.style.position = 'relative';
 
     let gridCol = (col === 0 ? 7 : col) + 1; 
     div.style.gridColumn = gridCol;
@@ -391,13 +602,11 @@ function drawEvent(course, container, dStr, col, overlapCount = 1) {
         ${badgeHTML}
     `;
 
-    // 點擊編輯
     div.onclick = (e) => { 
         e.stopPropagation(); 
         openModal(true, course); 
     };
 
-    // 右鍵刪除邏輯
     div.oncontextmenu = (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -431,7 +640,7 @@ function drawEvent(course, container, dStr, col, overlapCount = 1) {
                     }
 
                     if (typeof window.uploadEvent === 'function') {
-                        window.uploadEvent(course); // 同步回雲端
+                        window.uploadEvent(course);
                     }
                     renderAll(); 
                 } else {
@@ -558,7 +767,6 @@ function renderAndSave() {
     renderAll();
 }
 
-// 【修正 1】：實作未定義的 clearWorkData 函式
 function clearWorkData() {
     if (confirm("⚠️ 確定要清空所有課程資料嗎？此操作不可逆！")) {
         courses = [];
@@ -569,19 +777,16 @@ function clearWorkData() {
     }
 }
 
-/** 🛠️ Helper: 計算指定月份每週一的 Date 物件陣列 */
 function getMondaysOfMonth(year, month) {
     const mondays = [];
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
 
-    // 找到當月第一天所在的週一
     let current = new Date(firstDay);
     const dayOfWeek = current.getDay();
     const diffToMonday = (dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
     current.setDate(current.getDate() + diffToMonday);
 
-    // 只要當週包含當月的日子，就記錄下來
     while (current <= lastDay || current.getMonth() === month) {
         mondays.push(new Date(current));
         current.setDate(current.getDate() + 7);
@@ -590,18 +795,19 @@ function getMondaysOfMonth(year, month) {
     return mondays;
 }
 
+// ------------------------------------------------------------
+// ▼▼▼ 修正：renderAll (教練端與學生端的時數渲染)
+// ------------------------------------------------------------
 export function renderAll() {
     try {
         const isStudent = currentUser && currentUser.role === 'student';
 
-        // 🎯 1. 取得行事曆容器與日期標頭
         const container = isStudent 
             ? (document.getElementById('student-calendar-grid') || document.getElementById('dropzone'))
             : document.getElementById('dropzone');
 
         if (!container) return;
 
-        // 清除舊的行程方塊
         container.querySelectorAll('.placed-event').forEach(el => el.remove());
 
         const dayHeaders = document.querySelectorAll('.day-header');
@@ -616,17 +822,13 @@ export function renderAll() {
         const currentMonth = middleDate.getMonth();
 
         let weekTotalMinutes = 0;
-        let studentMonthMinutes = 0;
-
         const currentCourses = window.courses || courses || [];
-
-        // 🎯 2. 收集當週需要繪製的行程 ( pendingEvents )
         const pendingEvents = [];
 
+        // 1. 收集當週需要繪製的行程
         currentCourses.forEach(course => {
             if (!course) return;
 
-            // 🔒 學生權限過濾：若為學生登入，僅保留名稱匹配的課程
             if (isStudent) {
                 const studentNameMatch = course.name === currentUser.name || course.studentName === currentUser.name;
                 if (!studentNameMatch) return; 
@@ -637,13 +839,16 @@ export function renderAll() {
             if (course.isRepeating) {
                 dayHeaders.forEach(header => {
                     const dStr = header.dataset.fullDate;
-                    const hDay = header.dataset.day; // 週一="1"...週日="0"
+                    const hDay = header.dataset.day;
 
                     let normalizedCourseDay = (course.day === "8" ? "0" : (parseInt(course.day) - 1).toString());
 
                     if (normalizedCourseDay === hDay && !isException(dStr)) {
                         pendingEvents.push({ course, dStr, col: parseInt(hDay) });
-                        if (course.type === 'work') weekTotalMinutes += Number(course.duration || 0);
+                        if (course.type === 'work') {
+                            const singleDur = Number(course.duration) || ((course.endRow - course.startRow) * 15) || 60;
+                            weekTotalMinutes += singleDur;
+                        }
                     }
                 });
             } else {
@@ -651,13 +856,16 @@ export function renderAll() {
                     const targetHeader = Array.from(dayHeaders).find(h => h.dataset.fullDate === course.date);
                     if (targetHeader) {
                         pendingEvents.push({ course, dStr: course.date, col: parseInt(targetHeader.dataset.day) });
-                        if (course.type === 'work') weekTotalMinutes += Number(course.duration || 0);
+                        if (course.type === 'work') {
+                            const singleDur = Number(course.duration) || ((course.endRow - course.startRow) * 15) || 60;
+                            weekTotalMinutes += singleDur;
+                        }
                     }
                 }
             }
         });
 
-        // 🎯 3. 精確計算重疊數量 ( overlapCount ) 並進行 DOM 繪製
+        // 2. 繪製行程卡片
         pendingEvents.forEach(({ course, dStr, col }) => {
             const overlapCount = pendingEvents.filter(item => 
                 item.dStr === dStr && 
@@ -669,25 +877,16 @@ export function renderAll() {
             }
         });
 
-        // 🎯 4. 數據統計與 UI 介面更新
+        // 3. 數據統計與 UI 介面更新
         if (isStudent) {
-            // 🎓 學生端：計算學生當月總上課時數
-            currentCourses.forEach(course => {
-                const isMyCourse = course.name === currentUser.name || course.studentName === currentUser.name;
-                if (isMyCourse && course.type === 'work') {
-                    if (typeof course.isMonthMatch === 'function' ? course.isMonthMatch(currentYear, currentMonth) : true) {
-                        studentMonthMinutes += Number(course.duration || 0);
-                    }
-                }
-            });
+            // 🎓 學生端：直接使用統一的 calculateMonthlyData 計算，確保數字 100% 一致
+            const studentMonthData = calculateMonthlyData(currentYear, currentMonth);
 
-            // 更新學生頁面數字
             const studentHoursEl = document.getElementById('student-total-hours');
             if (studentHoursEl) {
-                studentHoursEl.innerText = (studentMonthMinutes / 60).toFixed(1);
+                studentHoursEl.innerText = (studentMonthData.totalMinutes / 60).toFixed(1);
             }
 
-            // 更新繳費狀態
             const paymentEl = document.getElementById('student-class-count');
             if (paymentEl) {
                 const isPaid = currentUser.isPaid ?? false;
@@ -696,7 +895,7 @@ export function renderAll() {
             }
 
         } else {
-            // 👨‍🏫 教練端：全月數據與側邊欄渲染
+            // 👨‍🏫 教練端：計算月度數據並渲染側邊欄
             if (typeof calculateMonthlyData === 'function') {
                 const monthData = calculateMonthlyData(currentYear, currentMonth);
 
@@ -721,7 +920,7 @@ export function renderAll() {
 
 window.renderAll = renderAll;
 
-/** 🚀 匯出整月課表與統計圖片（單一側邊欄 + 舒適排版） */
+// --- 8. 匯出圖片 ---
 window.exportScheduleToImage = async function(event) {
     const btn = event?.currentTarget || event?.target;
     const originalText = btn?.innerText || '';
@@ -734,7 +933,7 @@ window.exportScheduleToImage = async function(event) {
         btn.disabled = true;
     }
 
-    const originalViewDate = new Date(viewDate); // 1. 備份原始日期
+    const originalViewDate = new Date(viewDate);
     const targetYear = viewDate.getFullYear();
     const targetMonth = viewDate.getMonth();
     const weekMondays = getMondaysOfMonth(targetYear, targetMonth);
@@ -744,7 +943,6 @@ window.exportScheduleToImage = async function(event) {
     try {
         const canvases = [];
 
-        // 2. 依次擷取每週畫面
         for (let i = 0; i < weekMondays.length; i++) {
             const monday = weekMondays[i];
             const isFirstWeek = (i === 0);
@@ -753,7 +951,6 @@ window.exportScheduleToImage = async function(event) {
             if (typeof updateWeekDates === 'function') updateWeekDates();
             if (typeof renderAll === 'function') renderAll();
 
-            // 等待 DOM 重繪
             await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 150)));
 
             const canvas = await html2canvas(mainApp, {
@@ -776,7 +973,6 @@ window.exportScheduleToImage = async function(event) {
             canvases.push(canvas);
         }
 
-        // 3. 計算拼接後的總寬度與總高度
         const totalWidth = canvases[0].width;
         const totalHeight = canvases.reduce((sum, c) => sum + c.height, 0) + (WEEK_SPACING * (canvases.length - 1));
 
@@ -785,11 +981,9 @@ window.exportScheduleToImage = async function(event) {
         mergedCanvas.height = totalHeight;
         const ctx = mergedCanvas.getContext('2d');
 
-        // 滿版白色背景
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, totalWidth, totalHeight);
 
-        // 4. 垂直繪製與拼接
         let currentY = 0;
         for (let i = 0; i < canvases.length; i++) {
             const c = canvases[i];
@@ -797,7 +991,6 @@ window.exportScheduleToImage = async function(event) {
             currentY += c.height + WEEK_SPACING;
         }
 
-        // 5. 匯出圖片檔案
         mergedCanvas.toBlob((blob) => {
             if (!blob) throw new Error('Blob 生成失敗');
             
@@ -816,7 +1009,6 @@ window.exportScheduleToImage = async function(event) {
         console.error('匯出全月圖片失敗:', err);
         alert('匯出時發生錯誤，請確認是否有引入 html2canvas 套件。');
     } finally {
-        // 6. 還原原始畫面狀態
         viewDate = originalViewDate;
         if (typeof updateWeekDates === 'function') updateWeekDates();
         if (typeof renderAll === 'function') renderAll();

@@ -154,17 +154,37 @@
         <div class="coach-panel" id="panel-income" data-panel-id="panel-income">
             <div class="panel-inner">
                 <h2 class="panel-title">本月收入總覽</h2>
-                <div class="income-summary-row">
-                    <div class="income-summary-card">
-                        <span class="label">本月總時數</span>
-                        <span class="value" id="income-panel-total-hours">0</span>
-                    </div>
-                    <div class="income-summary-card">
-                        <span class="label">本月總收入</span>
-                        <span class="value" id="income-panel-total-income">0</span>
-                    </div>
-                </div>
+                <!-- ▼▼▼ 修改：收入總覽加入已收款 / 待收款 ▼▼▼ -->
+<div class="income-summary-row">
+
+    <div class="income-summary-card">
+        <span class="label">本月總時數</span>
+        <span class="value" id="income-panel-total-hours">0</span>
+    </div>
+
+    <div class="income-summary-card">
+        <span class="label">本月總收入</span>
+        <span class="value" id="income-panel-total-income">0</span>
+    </div>
+
+    <div class="income-summary-card income-paid-card">
+        <span class="label">已收款</span>
+        <span class="value" id="income-panel-paid-income">$0</span>
+    </div>
+
+    <div class="income-summary-card income-pending-card">
+        <span class="label">待收款</span>
+        <span class="value" id="income-panel-pending-income">$0</span>
+    </div>
+
+</div>
+<!-- ▲▲▲ 修改結束 ▲▲▲ -->
                 <h3 class="panel-subtitle">依學生分項</h3>
+                    <div class="income-check-hint">
+                        <span>☑️ 已收款</span>
+                        <span>⬜ 待收款</span>
+                    </div>
+
                 <div id="income-panel-breakdown">
                     <p class="no-data-hint">讀取中...</p>
                 </div>
