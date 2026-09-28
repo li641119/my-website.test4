@@ -58,15 +58,120 @@ export let currentUser = {
     name: ''
 };
 
-// ▼▼▼ 修正：刪除了原本這裡的「假登入測試」submit 監聽器
-// （原本用 userData = {uid:"user_123", role: email.includes('student')...} 那段），
-// 那段跟下面真正的 Firebase 登入邏輯重複綁在同一個表單上，兩個都會觸發，
-// 而且它是純前端假資料，不會真的驗證密碼，必須刪掉。
-// ▲▲▲
+// ------------------------------------------------------------
+// ▼▼▼ 新增：每月收款紀錄 Firebase 管理
+// ------------------------------------------------------------
+//
+// Firestore 結構：
+// incomeRecords
+//   └── 教練UID_2026-09_學生姓名
+//         ├── coachUid
+//         ├── year
+//         ├── month
+//         ├── studentName
+//         └── isPaid
+//
+// 每個「教練 × 月份 × 學生」只會有一筆紀錄。
+// 因此勾選/取消勾選時，直接更新同一份文件即可。
+// ------------------------------------------------------------
 
-// ------------------------------------------------------------
-// ▼▼▼ 新增：註冊表單邏輯（原本完全沒有實作，導致註冊表單按下去沒反應）
-// ------------------------------------------------------------
+function getIncomeRecordId(year, month, studentName) {
+    const monthText = String(month + 1).padStart(2, '0');
+
+    // encodeURIComponent 避免學生姓名包含特殊字元時造成 Firestore 文件 ID 問題
+    return `${currentUser.uid}_${year}-${monthText}_${encodeURIComponent(studentName)}`;
+}
+
+
+// 儲存某位學生本月是否已收款
+window.setIncomePaidStatus = async function (
+    year,
+    month,
+    studentName,
+    isPaid
+) {
+    if (!currentUser.uid) {
+        console.error('❌ 尚未登入，無法儲存收款紀錄');
+        return false;
+    }
+
+    try {
+        const recordId = getIncomeRecordId(
+            year,
+            month,
+            studentName
+        );
+
+        await setDoc(
+            doc(db, "incomeRecords", recordId),
+            {
+                coachUid: currentUser.uid,
+                year: year,
+                month: month + 1,
+                studentName: studentName,
+                isPaid: isPaid,
+                updatedAt: new Date().toISOString()
+            },
+            { merge: true }
+        );
+
+        console.log(
+            `💰 收款紀錄已更新：${year}-${String(month + 1).padStart(2, '0')} / ${studentName} / ${isPaid ? '已收款' : '待收款'}`
+        );
+
+        return true;
+
+    } catch (error) {
+        console.error("❌ 儲存收款紀錄失敗:", error);
+        return false;
+    }
+};
+
+
+// 讀取某個月份所有學生的收款狀態
+window.loadIncomePaidStatuses = async function (
+    year,
+    month
+) {
+    if (!currentUser.uid) {
+        console.warn('⚠️ 尚未登入，無法讀取收款紀錄');
+        return {};
+    }
+
+    try {
+        const q = query(
+            collection(db, "incomeRecords"),
+            where("coachUid", "==", currentUser.uid),
+            where("year", "==", year),
+            where("month", "==", month + 1)
+        );
+
+        const snapshot = await getDocs(q);
+
+        const result = {};
+
+        snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+
+            if (data.studentName) {
+                result[data.studentName] = data.isPaid === true;
+            }
+        });
+
+        console.log(
+            `📥 已讀取 ${year}-${String(month + 1).padStart(2, '0')} 收款紀錄，共 ${Object.keys(result).length} 筆`
+        );
+
+        return result;
+
+    } catch (error) {
+        console.error("❌ 讀取收款紀錄失敗:", error);
+        return {};
+    }
+};
+
+// ▲▲▲ 新增結束 ▲▲▲
+
 const registerForm = document.getElementById('register-form');
 if (registerForm) {
     registerForm.addEventListener('submit', async (e) => {

@@ -345,58 +345,132 @@ window.updateStats = function() {
 }
 
 // ------------------------------------------------------------
-// ▼▼▼ 新增：本月收入「學生收款狀態」管理
+// ▼▼▼ 修改：本月收入「學生收款狀態」改為 Firebase 儲存
 // ------------------------------------------------------------
 
-// 取得某個月份的收款紀錄
-function getIncomePaidKey(year, month, studentName) {
-    return `income-paid-${year}-${month + 1}-${studentName}`;
-}
+// 暫存在記憶體中的收款狀態
+// 這不是永久資料，真正的資料來源是 Firebase。
+let incomePaidCache = {};
 
-// 取得學生本月是否已收款
+let incomePaidCacheYear = null;
+let incomePaidCacheMonth = null;
+
+
+// 取得目前月份的收款狀態
 function getIncomePaidStatus(year, month, studentName) {
-    return localStorage.getItem(
-        getIncomePaidKey(year, month, studentName)
-    ) === 'true';
+    return incomePaidCache[studentName] === true;
 }
 
-// 更新學生本月收款狀態
-window.toggleIncomePaid = function(studentName, checked) {
+
+// 從 Firebase 重新載入指定月份
+async function loadIncomePaidStatusForMonth(year, month) {
+
+    // 已經載入過同一月份，就不用重複讀取
+    if (
+        incomePaidCacheYear === year &&
+        incomePaidCacheMonth === month
+    ) {
+        return;
+    }
+
+    incomePaidCacheYear = year;
+    incomePaidCacheMonth = month;
+
+    // 先清空舊月份資料
+    incomePaidCache = {};
+
+    if (typeof window.loadIncomePaidStatuses !== 'function') {
+        console.error('❌ 找不到 window.loadIncomePaidStatuses');
+        return;
+    }
+
+    try {
+
+        const result =
+            await window.loadIncomePaidStatuses(
+                year,
+                month
+            );
+
+        incomePaidCache = result || {};
+
+    } catch (error) {
+
+        console.error(
+            '❌ 載入月份收款狀態失敗:',
+            error
+        );
+
+        incomePaidCache = {};
+    }
+}
+
+
+// 勾選「已收款」時
+window.toggleIncomePaid = async function (
+    studentName,
+    checked
+) {
 
     const year = viewDate.getFullYear();
     const month = viewDate.getMonth();
 
-    localStorage.setItem(
-        getIncomePaidKey(year, month, studentName),
-        checked ? 'true' : 'false'
-    );
+    // 先更新畫面
+    incomePaidCache[studentName] = checked;
 
-    // 重新渲染收入列表
     renderIncomePanel();
+
+    // 寫入 Firebase
+    if (typeof window.setIncomePaidStatus !== 'function') {
+        console.error('❌ 找不到 window.setIncomePaidStatus');
+        return;
+    }
+
+    const success =
+        await window.setIncomePaidStatus(
+            year,
+            month,
+            studentName,
+            checked
+        );
+
+    // 如果 Firebase 寫入失敗
+    if (!success) {
+
+        // 還原原本狀態
+        incomePaidCache[studentName] = !checked;
+
+        renderIncomePanel();
+
+        alert(
+            '收款紀錄儲存失敗，請檢查網路連線後再試一次。'
+        );
+    }
 };
 
-// ▲▲▲ 新增結束
+// ▲▲▲ 修改結束 ▲▲▲
 // ------------------------------------------------------------
 
-
 // ------------------------------------------------------------
-// ▼▼▼ 修改：本月收入面板
-// 加入「已收款 / 待收款」自動計算
+// ▼▼▼ 修改：本月收入面板改為使用 Firebase 收款紀錄
 // ------------------------------------------------------------
 
-export function renderIncomePanel() {
+export async function renderIncomePanel() {
 
     const year = viewDate.getFullYear();
     const month = viewDate.getMonth();
 
-    const monthData = calculateMonthlyData(year, month);
+    const monthData =
+        calculateMonthlyData(year, month);
 
     // --------------------------------------------------------
-    // 1. 本月總時數
+    // 1. 先顯示時數與總收入
     // --------------------------------------------------------
 
     const hoursEl =
-        document.getElementById('income-panel-total-hours');
+        document.getElementById(
+            'income-panel-total-hours'
+        );
 
     if (hoursEl) {
         hoursEl.innerText =
@@ -404,12 +478,10 @@ export function renderIncomePanel() {
     }
 
 
-    // --------------------------------------------------------
-    // 2. 本月總收入
-    // --------------------------------------------------------
-
     const incomeEl =
-        document.getElementById('income-panel-total-income');
+        document.getElementById(
+            'income-panel-total-income'
+        );
 
     if (incomeEl) {
         incomeEl.innerText =
@@ -417,92 +489,65 @@ export function renderIncomePanel() {
     }
 
 
-    // --------------------------------------------------------
-    // ▼▼▼ 3. 新增：計算已收款 / 待收款
-    // --------------------------------------------------------
-
-    let paidIncome = 0;
-    let pendingIncome = 0;
-
-    Object.entries(monthData.studentStats).forEach(
-        ([name, data]) => {
-
-            const isPaid = getIncomePaidStatus(
-                year,
-                month,
-                name
-            );
-
-            if (isPaid) {
-
-                paidIncome += data.money;
-
-            } else {
-
-                pendingIncome += data.money;
-
-            }
-
-        }
-    );
-
-
-    // 已收款
-    const paidIncomeEl =
-        document.getElementById('income-panel-paid-income');
-
-    if (paidIncomeEl) {
-
-        paidIncomeEl.innerText =
-            `$${Math.round(paidIncome).toLocaleString()}`;
-
-    }
-
-
-    // 待收款
-    const pendingIncomeEl =
-        document.getElementById('income-panel-pending-income');
-
-    if (pendingIncomeEl) {
-
-        pendingIncomeEl.innerText =
-            `$${Math.round(pendingIncome).toLocaleString()}`;
-
-    }
-
-    // ▲▲▲ 3. 新增結束
-    // --------------------------------------------------------
-
-
-    // --------------------------------------------------------
-    // 4. 學生收入分項
-    // --------------------------------------------------------
-
     const breakdownEl =
-        document.getElementById('income-panel-breakdown');
+        document.getElementById(
+            'income-panel-breakdown'
+        );
 
     if (!breakdownEl) return;
 
 
+    // --------------------------------------------------------
+    // 2. 沒有學生資料
+    // --------------------------------------------------------
+
     const entries =
         Object.entries(monthData.studentStats)
-        .sort((a, b) => b[1].money - a[1].money);
-
+        .sort(
+            (a, b) =>
+                b[1].money - a[1].money
+        );
 
     if (entries.length === 0) {
 
         breakdownEl.innerHTML =
             '<p class="no-data-hint">本月尚無教球紀錄</p>';
 
+        const paidEl =
+            document.getElementById(
+                'income-panel-paid-income'
+            );
+
+        const pendingEl =
+            document.getElementById(
+                'income-panel-pending-income'
+            );
+
+        if (paidEl) paidEl.innerText = '$0';
+        if (pendingEl) pendingEl.innerText = '$0';
+
         return;
     }
 
 
     // --------------------------------------------------------
-    // 5. 產生學生列表
+    // 3. 從 Firebase 載入本月份收款紀錄
     // --------------------------------------------------------
 
-    breakdownEl.innerHTML = entries.map(
+    await loadIncomePaidStatusForMonth(
+        year,
+        month
+    );
+
+
+    // --------------------------------------------------------
+    // 4. 計算已收款 / 待收款
+    // --------------------------------------------------------
+
+    let paidIncome = 0;
+    let pendingIncome = 0;
+
+    entries.forEach(
         ([name, data]) => {
 
             const isPaid =
@@ -512,56 +557,98 @@ export function renderIncomePanel() {
                     name
                 );
 
-
-            // 防止學生姓名中的特殊字元破壞 onclick
-            const safeName =
-                name
-                    .replace(/\\/g, '\\\\')
-                    .replace(/'/g, "\\'");
-
-
-            return `
-
-                <div class="db-row income-student-row ${isPaid ? 'is-paid' : ''}">
-
-                    <label class="income-paid-checkbox">
-
-                        <input
-                            type="checkbox"
-                            ${isPaid ? 'checked' : ''}
-                            onchange="toggleIncomePaid('${safeName}', this.checked)"
-                        >
-
-                        <span>已收款</span>
-
-                    </label>
-
-
-                    <span class="db-name">
-                        ${name}
-                    </span>
-
-
-                    <span class="db-meta">
-                        ${(data.mins / 60).toFixed(1)} 小時
-                        ·
-                        $${Math.round(data.money).toLocaleString()}
-                    </span>
-
-                </div>
-
-            `;
-
+            if (isPaid) {
+                paidIncome += data.money;
+            } else {
+                pendingIncome += data.money;
+            }
         }
-    ).join('');
+    );
 
+
+    // --------------------------------------------------------
+    // 5. 更新上方收入卡片
+    // --------------------------------------------------------
+
+    const paidIncomeEl =
+        document.getElementById(
+            'income-panel-paid-income'
+        );
+
+    if (paidIncomeEl) {
+        paidIncomeEl.innerText =
+            `$${Math.round(paidIncome).toLocaleString()}`;
+    }
+
+
+    const pendingIncomeEl =
+        document.getElementById(
+            'income-panel-pending-income'
+        );
+
+    if (pendingIncomeEl) {
+        pendingIncomeEl.innerText =
+            `$${Math.round(pendingIncome).toLocaleString()}`;
+    }
+
+
+    // --------------------------------------------------------
+    // 6. 建立學生收款列表
+    // --------------------------------------------------------
+
+    breakdownEl.innerHTML =
+        entries.map(
+            ([name, data]) => {
+
+                const isPaid =
+                    getIncomePaidStatus(
+                        year,
+                        month,
+                        name
+                    );
+
+                // 避免學生姓名裡的特殊字元破壞 onclick
+                const safeName =
+                    name
+                        .replace(/\\/g, '\\\\')
+                        .replace(/'/g, "\\'");
+
+                return `
+                    <div class="db-row income-student-row ${isPaid ? 'is-paid' : ''}">
+
+                        <label class="income-paid-checkbox">
+
+                            <input
+                                type="checkbox"
+                                ${isPaid ? 'checked' : ''}
+                                onchange="toggleIncomePaid('${safeName}', this.checked)"
+                            >
+
+                            <span>已收款</span>
+
+                        </label>
+
+                        <span class="db-name">
+                            ${name}
+                        </span>
+
+                        <span class="db-meta">
+                            ${(data.mins / 60).toFixed(1)} 小時
+                            ·
+                            $${Math.round(data.money).toLocaleString()}
+                        </span>
+
+                    </div>
+                `;
+            }
+        ).join('');
 }
 
-// ▲▲▲ 修改結束
-// ------------------------------------------------------------
-
-
+// 保留給 app.js / HTML 導覽列使用
 window.renderIncomePanel = renderIncomePanel;
+
+// ▲▲▲ 修改結束 ▲▲▲
+// ------------------------------------------------------------
 
 // --- 5. 繪製行程方塊 ---
 function drawEvent(course, container, dStr, col, overlapCount = 1) {
