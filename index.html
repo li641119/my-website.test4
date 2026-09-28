@@ -155,29 +155,29 @@
             <div class="panel-inner">
                 <h2 class="panel-title">本月收入總覽</h2>
                 <!-- ▼▼▼ 修改：收入總覽加入已收款 / 待收款 ▼▼▼ -->
-<div class="income-summary-row">
+                <div class="income-summary-row">
 
-    <div class="income-summary-card">
-        <span class="label">本月總時數</span>
-        <span class="value" id="income-panel-total-hours">0</span>
-    </div>
+                    <div class="income-summary-card">
+                        <span class="label">本月總時數</span>
+                        <span class="value" id="income-panel-total-hours">0</span>
+                    </div>
 
-    <div class="income-summary-card">
-        <span class="label">本月總收入</span>
-        <span class="value" id="income-panel-total-income">0</span>
-    </div>
+                    <div class="income-summary-card">
+                        <span class="label">本月總收入</span>
+                        <span class="value" id="income-panel-total-income">0</span>
+                    </div>
 
-    <div class="income-summary-card income-paid-card">
-        <span class="label">已收款</span>
-        <span class="value" id="income-panel-paid-income">$0</span>
-    </div>
+                    <div class="income-summary-card income-paid-card">
+                        <span class="label">已收款</span>
+                        <span class="value" id="income-panel-paid-income">$0</span>
+                    </div>
 
-    <div class="income-summary-card income-pending-card">
-        <span class="label">待收款</span>
-        <span class="value" id="income-panel-pending-income">$0</span>
-    </div>
+                    <div class="income-summary-card income-pending-card">
+                        <span class="label">待收款</span>
+                        <span class="value" id="income-panel-pending-income">$0</span>
+                    </div>
 
-</div>
+                </div>
 <!-- ▲▲▲ 修改結束 ▲▲▲ -->
                 <h3 class="panel-subtitle">依學生分項</h3>
                     <div class="income-check-hint">
@@ -240,7 +240,7 @@
                     <option value="school">上課</option>
                     <option value="others">其他行程</option>
                 </select>
-            </label>
+   
 
             <label for="m-day">星期:</label>
             <select id="m-day">
@@ -269,7 +269,7 @@
             </label>
 
             <div class="modal-buttons">
-                <button type= "button" class="btn-save" onclick="saveFromModal()" class="save-btn">儲存行程</button>
+                <button type= "button" class="btn-save save-btn" onclick="saveFromModal()" >儲存行程</button>
                 <button type= "button" class="btn-cancel" onclick="closeModal()">取消</button>
             </div>
         </div>
