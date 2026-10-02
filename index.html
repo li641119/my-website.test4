@@ -12,206 +12,245 @@
 </head>
 
 <body>
-<!-- ▼▼▼ 新增：登出按鈕（登入後才顯示，由 app.js 控制） ▼▼▼ -->
-<button type="button" id="logout-btn" class="hide">登出</button>
-<!-- ▲▲▲ 新增結束 ▲▲▲ -->
-<!--所有人都需要通過這關門禁大廳-->
+    <!-- 登入頁面 -->
     <div id="login-container">
-        <div class="auth-box">
-            <h1>桌球教學管理系統</h1>
-            <p class="login-subtitle">登入以查看課程與時數統計</p>
+            <div class="auth-box">
+                <h1>桌球教學管理系統</h1>
+                <p class="login-subtitle">登入以查看課程與時數統計</p>
+                
+                <div class="auth-tabs">
+                    <button type="button" class="auth-tab active" id="tab-login">登入</button>
+                    <button type="button" class="auth-tab" id="tab-register">註冊</button>
+                </div>
+
+                <form id="login-form" autocomplete="off">
+                    <span class="field-label">電子郵件</span>
+                    <input type="email" id="email" placeholder="student@gmail.com" autocomplete="username" required>
+
+                    <span class="field-label">密碼</span>
+
+                    <div class="password-field">
+                        <input type="password" id="password" placeholder="輸入密碼" autocomplete="off" required>
+                        <button type="button" class="toggle-pw" data-target="password">顯示</button>
+                    </div>
+                    <!-- 記住我的帳號 -->
+                    <label style="display:flex; align-items:center; gap:6px; font-size:13px; color: var(--lc-ink-soft); margin-top:-4px; cursor:pointer;">
+                        <input type="checkbox" id="remember-email" style="width:auto; margin:0;">記住我的帳號
+                    </label>
+
+                    <button type="submit" class="login-btn">登入</button>
+                    <!-- 忘記密碼連結 -->
+                    <a href="#" id="forgot-password-link" class="auth-footnote">忘記密碼？</a>
+                </form>
             
-            <div class="auth-tabs">
-                <button type="button" class="auth-tab active" id="tab-login">登入</button>
-                <button type="button" class="auth-tab" id="tab-register">註冊</button>
-            </div>
-
-            <form id="login-form" autocomplete="off">
-                <span class="field-label">電子郵件</span>
-                <input type="email" id="email" placeholder="you@example.com" autocomplete="username" required>
-                 <span class="field-label">密碼</span>
-                <div class="password-field">
-                    <input type="password" id="password" placeholder="輸入密碼" autocomplete="off" required>
-                    <button type="button" class="toggle-pw" data-target="password">顯示</button>
-                </div>
-                <!-- ▼▼▼ 新增：記住我的帳號 ▼▼▼ -->
-                <label style="display:flex; align-items:center; gap:6px; font-size:13px; color: var(--lc-ink-soft); margin-top:-4px; cursor:pointer;">
-                    <input type="checkbox" id="remember-email" style="width:auto; margin:0;">
-                    記住我的帳號
-                </label>
-                <!-- ▲▲▲ 新增結束 ▲▲▲ -->
-                <button type="submit" class="login-btn">登入</button>
-                <!-- ▼▼▼ 新增：忘記密碼連結 ▼▼▼ -->
-                <a href="#" id="forgot-password-link" class="auth-footnote" style="display:block; margin-top:12px; cursor:pointer;">忘記密碼？</a>
-                <!-- ▲▲▲ 新增結束 ▲▲▲ -->
-            </form>
+            <!-- 註冊頁面 -->
             <div id="login-error"></div>
+                <form id="register-form" class="auth-form-hidden">
+                    <span class="field-label">姓名</span>
+                    <input type="text" id="register-name" placeholder="你的姓名" required>
+    
+                    <span class="field-label">電子郵件</span>
+                    <input type="email" id="register-email" placeholder="student@gmail.com" required>
+    
+                    <span class="field-label">密碼</span>
+                    <div class="password-field">
+                        <input type="password" id="register-password" placeholder="至少 6 個字元" required>
+                        <button type="button" class="toggle-pw" data-target="register-password">顯示</button>
+                    </div>
+    
+                    <span class="field-label">確認密碼</span>
+                    <div class="password-field">
+                        <input type="password" id="register-confirm" placeholder="再次輸入密碼" required>
+                        <button type="button" class="toggle-pw" data-target="register-confirm">顯示</button>
+                    </div>
 
-             <form id="register-form" class="auth-form-hidden">
-                <span class="field-label">姓名</span>
-                <input type="text" id="register-name" placeholder="你的姓名" required>
- 
-                <span class="field-label">電子郵件</span>
-                <input type="email" id="register-email" placeholder="you@example.com" required>
- 
-                <span class="field-label">密碼</span>
-                <div class="password-field">
-                    <input type="password" id="register-password" placeholder="至少 6 個字元" required>
-                    <button type="button" class="toggle-pw" data-target="register-password">顯示</button>
-                </div>
- 
-                <span class="field-label">確認密碼</span>
-                <div class="password-field">
-                    <input type="password" id="register-confirm" placeholder="再次輸入密碼" required>
-                    <button type="button" class="toggle-pw" data-target="register-confirm">顯示</button>
-                </div>
-
-                <button type="submit" class="login-btn">建立帳號</button>
-            </form>
+                    <button type="submit" class="login-btn">建立帳號</button>
+                </form>
             <div id="register-error"></div>
-
-            <p class="auth-footnote">忘記密碼或帳號問題，請聯絡教練協助處理。</p>
         </div>
     </div>
 
-<!--教練專用頁面-->
+<!--coach view-->
     <div id="coach-view" class="hide">
-        <!-- ▼▼▼ 新增：頂部導覽列，切換教練的三個畫面 ▼▼▼ -->
-        <div class="coach-nav">
-            <button type="button" class="coach-nav-btn active" data-panel="panel-calendar">📅 行事曆</button>
-            <button type="button" class="coach-nav-btn" data-panel="panel-students">👥 學生資料庫</button>
-            <button type="button" class="coach-nav-btn" data-panel="panel-income">💰 本月收入</button>
-        </div>
-        <!-- ▲▲▲ 新增結束 ▲▲▲ -->
+        <aside class="coach-nav">
+            <button type="button" class="coach-nav-btn active" data-panel="panel-overview">📊 資訊總覽</button>
+            <button type="button" class="coach-nav-btn" data-panel="panel-calendar">📅 課程日曆</button>
+            <button type="button" class="coach-nav-btn" data-panel="panel-students">👥 學生資訊</button>
+            <button type="button" class="coach-nav-btn" data-panel="panel-income">💰 財務報表</button>
+            <button type="button" class="coach-nav-btn" id="logout-btn">登出</button>
 
-        <!-- ▼▼▼ 修改：main-wrapper 現在是「行事曆」這個畫面，內容完全不變 ▼▼▼ -->
-        <div class="main-wrapper coach-panel active" id="main-app" data-panel-id="panel-calendar">
-            <div class="sidebar">
-                <div class="sidebar-title">📊學生每月上課統計</div>
-                <div id="monthly-stats">
-                    <p class="no-data-hint">尚未有上課紀錄</p>
+                <div class="coach-nav-divider"></div>
+        </aside>
+
+        <main class="coach-content">
+            <!--資訊總覽，尚未補上-->
+            <div class="coach-panel active" id="panel-overview" data-panel-id="panel-overview">
+                <div class="panel-inner">
+                    <div class="panel-header-row">
+                        </div>
+                    </div>
                 </div>
-                <hr>
-                <div id="stats-summary" class="stats-footer">
-                    <p>📅 當週時數：<span id="week-total">0</span> 小時</p>
-                    <p>🗓️ 當月時數：<span id="month-total">0</span> 小時</p>
-                    <p>
-                        💵 當月收入: 
-                        <span class="income-wrapper">
-                            <span id="month-income" class="income-amount">0</span> 元
-                            <button type="button" id="toggle-income-btn" class="toggle-income-btn">查看</button>
-                        </span>
-                    </p>
+
+            <!--課程日曆，剩下排版-->
+            <div class="coach-panel" id="panel-calendar" data-panel-id="panel-calendar">
+                <div class="main-wrapper" id="main-app">
+                    <!--sidebar-->
+                    <div class="sidebar">
+                    <div id="monthly-stats">
+                        <p class="no-data-hint">尚未有上課紀錄</p>
+                    </div>
+                    <hr>
+                    <button id="export-ics-btn" class="clear-btn secondary" onclick="exportScheduleToImage()"> 📤 匯出本週行事曆 (.png)</button>
                 </div>
-                <button id="export-ics-btn" class="clear-btn secondary" onclick="exportScheduleToImage()"> 📤 匯出本週行事曆 (.png)</button>
+                    <!--calendar-->
+                <div class="calendar-container">
+                    <div class="calendar-header flex center">
+                        <h3 id="current-month-range" class="calendar-title">
+                            📅 讀取中...
+                        </h3>
+                    </div>
+                    <!--上下周切換按鈕-->
+                    <div class="floating-controls">
+                        <button onclick="changeWeek(-1)" title="上一週"> ⬅️</button>
+                        <button onclick="goToday()" class="today-btn"> 本週</button>
+                        <button onclick="changeWeek(1)" title="下一週"> ➡️</button>
+                    </div>
+
+                    <!--calendar-->
+                    <div class="schedule-grid" id="dropzone">
+                        <div class="corner"></div>
+                        <div class="day-header" data-day="1">
+                            <span class="date-label"></span>(一)
+                        </div>
+                        <div class="day-header" data-day="2">
+                            <span class="date-label"></span>(二)
+                        </div>
+                        <div class="day-header" data-day="3">
+                            <span class="date-label"></span>(三)
+                        </div>
+                        <div class="day-header" data-day="4">
+                            <span class="date-label"></span>(四)
+                        </div>
+                        <div class="day-header" data-day="5">
+                            <span class="date-label"></span>(五)
+                        </div>
+                        <div class="day-header" data-day="6">
+                            <span class="date-label"></span>(六)
+                        </div>
+                        <div class="day-header" data-day="7">
+                            <span class="date-label"></span>(日)
+                        </div>
+                
+
+                        <div class="time-column">
+                            <div>08:00</div>
+                            <div>09:00</div>
+                            <div>10:00</div>
+                            <div>11:00</div>
+                            <div>12:00</div>
+                            <div>13:00</div>
+                            <div>14:00</div>
+                            <div>15:00</div>
+                            <div>16:00</div>
+                            <div>17:00</div>
+                            <div>18:00</div>
+                            <div>19:00</div>
+                            <div>20:00</div>
+                            <div>21:00</div>
+                            <div>22:00</div>
+                        </div>
+                        <div class="grid-lines"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
         
-            <div class="calendar-container">
-                <div class="calendar-header flex center">
-                    <h3 id="current-month-range" class="calendar-title">📅 讀取中...</h3>
-                </div>
-                <div class="floating-controls">
-                    <button onclick="changeWeek(-1)" title="上一週">⬅️</button>
-                    <button onclick="goToday()" class="today-btn">本週</button>
-                    <button onclick="changeWeek(1)" title="下一週">➡️</button>
-                </div>
-                <div class="schedule-grid" id="dropzone">
-                    <div class="corner"></div>
-                    <div class="day-header" data-day="1"><span class="date-label"></span>(一)</div>
-                    <div class="day-header" data-day="2"><span class="date-label"></span>(二)</div>
-                    <div class="day-header" data-day="3"><span class="date-label"></span>(三)</div>
-                    <div class="day-header" data-day="4"><span class="date-label"></span>(四)</div>
-                    <div class="day-header" data-day="5"><span class="date-label"></span>(五)</div>
-                    <div class="day-header" data-day="6"><span class="date-label"></span>(六)</div>
-                    <div class="day-header" data-day="0"><span class="date-label"></span>(日)</div>
-                <div class="time-column">
-                    <div>08:00</div><div>09:00</div><div>10:00</div><div>11:00</div>
-                    <div>12:00</div><div>13:00</div><div>14:00</div><div>15:00</div>
-                    <div>16:00</div><div>17:00</div><div>18:00</div><div>19:00</div>
-                    <div>20:00</div><div>21:00</div><div>22:00</div>
+            <!--學生資訊，尚未完成輸入年月份查詢的功能-->
+
+            <div class="coach-panel" id="panel-students" data-panel-id="panel-students">
+                <div class="panel-inner">
+                    <div id="student-db-list">
+                        <p class="no-data-hint">讀取中...</p>
                     </div>
-                    <div class="grid-lines"></div>
+
+                    <template id="student-row-template">
+                        <div class="db-row-wrap">
+
+                            <!-- 學生基本資料 -->
+                            <div class="db-row db-row-clickable">
+                                <span class="db-name"></span>
+                                <span class="db-meta"></span>
+                            </div>
+
+                            <!-- 學生詳細資料 -->
+                            <div class="db-detail hide">
+                                <div class="db-detail-row">
+                                <button type="button" class="clear-btn delete-student-btn">🗑️ 刪除此學生</button>    
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <div class="panel-header-row">
+                        <button type="button" class="add-student-btn" onclick="addStudent()"> ＋ 新增學生</button>
+                    </div>
                 </div>
             </div>
-        </div>
-        <!-- ▲▲▲ 修改結束（main-wrapper 本身內容沒有變） ▲▲▲ -->
 
-        <!-- ▼▼▼ 新增：學生資料庫畫面（目前先顯示姓名/Email/預設學費，之後課程包做好可以加剩餘堂數） ▼▼▼ -->
-        <div class="coach-panel" id="panel-students" data-panel-id="panel-students">
-            <div class="panel-inner">
-                <div class="panel-header-row">
-                    <h2 class="panel-title">學生資料庫</h2>
-                    <button type="button" class="add-student-btn" onclick="addStudent()">＋ 新增學生</button>
-                </div>
-                <div id="student-db-list">
-                    <p class="no-data-hint">讀取中...</p>
+            <!--財務報表，尚未完成輸入年月份查詢的功能-->
+            <div class="coach-panel" id="panel-income" data-panel-id="panel-income">
+                <div class="panel-inner">
+                    <div class="income-summary-row">
+                        <div class= "income-summary-card">
+                            <span class="label">本月總時數</span>
+                            <span class="value" id="income-panel-total-hours">0</span>
+                        </div>
+                        <div class= "income-summary-card">
+                            <span class="label">本月總收入</span>
+                            <span class="value" id="income-panel-total-income">0</span>
+                        </div>
+                        <div class= "income-summary-card income-paid-card">
+                            <span class="label">已收款</span>
+                            <span class="value" id="income-panel-paid-income">0</span>
+                        </div>
+                        <div class="income-summary-card income-pending-card">
+                            <span class="label">待收款</span>
+                            <span class="value" id="income-panel-pending-income">0</span>
+                        </div>
+                    </div>
+                    
+                    <div class="income-analysis-row">
+                        <!-- 左邊：依學生分項 -->
+                        <div class="income-breakdown-section">
+                            <h3 class="panel-subtitle">依學生分項</h3>
+                            <div class="income-check-hint">
+                                <span>☑️ 已收款</span>
+                                <span>⬜ 待收款</span>
+                            </div>
+                        
+                            <div class ="panel-inner-payment" id="income-panel-breakdown">
+                                <p class="no-data-hint">
+                                    讀取中...
+                                </p>
+                            </div>
+                        </div>
+                        <!-- 右邊: 收入折線圖 -->
+                        <div class="income-breakdown-section">
+                            <div class="income-chart-header">
+                                <h3 class="panel-subtitle">收入折線圖</h3>
+                                <div class="income-chart-controls">
+                                    <button type="button" class="add-student-btn" id="income-year-btn">年份</button>
+                                    <button type="button" class="add-student-btn" id="income-month-btn">月份</button>
+                                    <button type="button" class="add-student-btn" id="income-chart-search-btn">查詢</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
-        </div>
-        <!-- ▲▲▲ 新增結束 ▲▲▲ -->
 
-        <!-- ▼▼▼ 新增：本月收入畫面（重複利用現有的月統計計算邏輯，只是換一個比較大的版面呈現） ▼▼▼ -->
-        <div class="coach-panel" id="panel-income" data-panel-id="panel-income">
-            <div class="panel-inner">
-                <h2 class="panel-title">本月收入總覽</h2>
-                <!-- ▼▼▼ 修改：收入總覽加入已收款 / 待收款 ▼▼▼ -->
-                <div class="income-summary-row">
-
-                    <div class="income-summary-card">
-                        <span class="label">本月總時數</span>
-                        <span class="value" id="income-panel-total-hours">0</span>
-                    </div>
-
-                    <div class="income-summary-card">
-                        <span class="label">本月總收入</span>
-                        <span class="value" id="income-panel-total-income">0</span>
-                    </div>
-
-                    <div class="income-summary-card income-paid-card">
-                        <span class="label">已收款</span>
-                        <span class="value" id="income-panel-paid-income">$0</span>
-                    </div>
-
-                    <div class="income-summary-card income-pending-card">
-                        <span class="label">待收款</span>
-                        <span class="value" id="income-panel-pending-income">$0</span>
-                    </div>
-
-                </div>
-<!-- ▲▲▲ 修改結束 ▲▲▲ -->
-                <h3 class="panel-subtitle">依學生分項</h3>
-                    <div class="income-check-hint">
-                        <span>☑️ 已收款</span>
-                        <span>⬜ 待收款</span>
-                    </div>
-
-                <div id="income-panel-breakdown">
-                    <p class="no-data-hint">讀取中...</p>
-                </div>
-            </div>
-        </div>
-        <!-- ▲▲▲ 新增結束 ▲▲▲ -->
-    </div>
-
-    <!--學生專用頁面-->
-    <div id="student-view" style="display: none;">
-        <div class="student-header">
-            <h2>👋 您好，<span id="student-name-display">同學</span></h2>
-            <div class="student-stats-row">
-                <div class="student-stat-card">
-                    <span>本月上課時數</span>
-                    <span class="stat-value" id="student-total-hours">0.0</span>
-                </div>
-                <div class="student-stat-card">
-                    <span>繳費情形</span>
-                    <span class="stat-value" id="student-class-count">未繳費</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="calendar-container">
-            <div id="student-calendar-grid"></div> 
-        </div>
+        </main>
     </div>
 
     <!--增加課程的視窗-->
@@ -275,6 +314,53 @@
         </div>
     </div>
 
+<!--student view-->
+    <div id="student-view" style="display: none;">
+        <!-- 置頂分頁 -->
+
+        <aside class="student-nav">
+            <button type="button" class="student-nav-btn active" data-student-panel="student-panel-overview">🏠 首頁</button>
+            <button type="button" class="student-nav-btn" data-student-panel="student-panel-calendar">📅 課程日曆</button>
+            <button type="button" class="student-nav-btn" data-student-panel="student-panel-record">💰 上課紀錄</button>
+            <button type="button" class="student-nav-btn" id="student-logout-btn">登出</button>
+        </aside>
+        
+        <main class="student-content">
+            <!-- 首頁 -->
+            <div class="student-panel active" id="student-panel-overview" data-student-panel-id="student-panel-overview">
+                <div class="student-header">
+                    <!--需補上登入後顯示該生名字-->
+                    <h2> Welcome back!<span id="student-name-display">同學</span></h2>
+                    <div class="student-stats-row">
+                        <div class="student-stat-card">
+                            <span>本月上課時數</span>
+                            <span class="stat-value" id="student-total-hours">0.0</span>
+                        </div>
+                        <div class="student-stat-card">
+                            <span>繳費情形</span>
+                            <span class="stat-value" id="student-class-count">未繳費</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 我的課程 -->   
+            <div class="student-panel" id="student-panel-calendar" data-student-panel-id="student-panel-calendar">
+                <div class="calendar-container">
+                    <div id="student-calendar-grid"></div>
+                </div>
+            </div>
+            <!-- 上課紀錄 -->
+            <div class="student-panel" id="student-panel-record" data-student-panel-id="student-panel-record">
+                <div class="student-record-container">
+                    <h3>💰 我的紀錄</h3>
+                    <p class="no-data-hint"> 之後可以在這裡放上課紀錄、繳費紀錄等資訊</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    
+
 <script type="module" src="app.js"></script>
 <script type="module" src="cal-gemini.js"></script>
 
@@ -313,6 +399,5 @@
     });
   })();
 </script>
-
 </body>
 </html>

@@ -28,22 +28,18 @@ body {
     min-height: 100vh; }
 
 /* 側邊欄 */
-.sidebar { 
-    width: 230px; 
-    background: white; 
-    padding: 20px; 
-    border-radius: 12px; 
+.sidebar {
+    width: 230px;
+    min-width: 230px;
+
+    background: white;
+    padding: 20px;
+
+    border-radius: 12px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+
     display: flex;
     flex-direction: column;
-}
-
-.sidebar-title {
-    text-align: center;
-    font-size: 18px;
-    font-weight: 700;
-    margin-bottom: 12px;
-    color: #2c3e50;
 }
 
 .no-data-hint {
@@ -179,44 +175,7 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     margin-top: auto;
 }
 
-.stats-footer {
-    background: transparent;
-    padding: 0;
-    border-radius: 0;
-    margin-bottom: 15px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
 
-.stats-footer p {
-    margin: 0;
-    background: #ffffff;
-    border: 1px solid #eaedf1;
-    padding: 12px 14px;
-    border-radius: 10px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 14px;
-    color: #546e7a;
-    font-weight: 500;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.02);
-    transition: all 0.2s ease;
-}
-
-.stats-footer p:hover {
-    border-color: #cfd8dc;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.04);
-}
-
-.stats-footer span {
-    font-size: 14px;
-    font-weight: 700;
-    color: #2c3e50;
-    font-variant-numeric: tabular-nums;
-}
 
 .income-wrapper {
     display: flex;
@@ -262,11 +221,7 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 }
 
 
-/* --- 學生視角專屬樣式 --- */
-#student-view {
-    flex-grow: 1;
-    width: 100%;
-}
+
 
 .student-header {
     background: white;
@@ -726,12 +681,14 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     font-weight: 800;
     color: var(--lc-ink);
     margin: 0 0 6px 0;
+    text-align: center;
 }
  
 .login-subtitle {
     font-size: 13.5px;
     color: var(--lc-ink-soft);
     margin: 0 0 28px 0;
+    text-align: center;
 }
 
 .auth-tabs {
@@ -764,15 +721,10 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 12px;
 }
 
-/* ▼▼▼ 修正問題1：登入畫面出現註冊欄位 ▼▼▼
-   原因：上面 #login-form, #register-form 是 ID 選擇器（優先權 100），
-   比 .auth-form-hidden 這個 class 選擇器（優先權 10）高。
-   即使 register-form 有 auth-form-hidden 這個 class，
-   display:flex 還是會贏過 display:none，導致註冊表單一直顯示。
-   加上 !important 蓋過去，跟你原本 .hide 的做法一致。 */
+
 .auth-form-hidden {
     display: none !important;
 }
@@ -881,29 +833,10 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     text-align: center;
 }
 
-/* ▼▼▼ 新增：右上角登出按鈕 ▼▼▼ */
-#logout-btn {
-    position: fixed;
-    top: 14px;
-    right: 14px;
-    z-index: 2000;
-    padding: 8px 16px;
-    border: none;
-    border-radius: 6px;
-    background: var(--lc-green-dark);
-    color: #EFEAE0;
-    font-family: "Microsoft JhengHei", sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-    transition: background 0.2s;
+#logout-btn,
+#student-logout-btn{
+    margin-left: auto;
 }
-
-#logout-btn:hover {
-    background: #000;
-}
-/* ▲▲▲ 新增結束 ▲▲▲ */
 
 
 @media (max-width: 768px) {
@@ -1019,66 +952,28 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     .day-header {padding: 2px;}
 }
 
-/* ▼▼▼ 新增：教練頁面頂部導覽列與畫面切換 ▼▼▼ */
-.coach-nav {
-    display: flex;
-    gap: 8px;
-    padding: 12px 20px;
-    background: #ffffff;
-    border-bottom: 1px solid #eaedf1;
-}
-
-.coach-nav-btn {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 8px;
-    background: transparent;
-    color: #546e7a;
-    font-family: "Microsoft JhengHei", sans-serif;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
-}
-
-.coach-nav-btn:hover {
-    background: #f0f2f5;
-}
-
-.coach-nav-btn.active {
-    background: #2c3e50;
-    color: #ffffff;
-}
-
-/* 三個畫面：預設全部隱藏，只有 .active 那個顯示 */
-.coach-panel {
-    display: none;
-}
-
-.coach-panel.active {
-    display: flex; /* main-wrapper 本來就是 flex，其餘兩個畫面下面另外用 .panel-inner 排版 */
-}
 
 .panel-inner {
     padding: 24px;
-    max-width: 900px;
+    max-width: 1100px;
     margin: 0 auto;
     width: 100%;
     box-sizing: border-box;
 }
 
-.panel-title {
-    font-size: 20px;
-    font-weight: 700;
-    color: #2c3e50;
-    margin: 0 0 20px;
+.panel-inner-payment {
+    max-width: 500px;
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: left;
 }
 
 .panel-subtitle {
     font-size: 15px;
     font-weight: 700;
     color: #2c3e50;
-    margin: 24px 0 12px;
+    margin: 20px 0 12px;
 }
 
 /* 本月收入畫面：兩張大卡片 */
@@ -1152,14 +1047,12 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
         flex-direction: column;
     }
 }
-/* ▲▲▲ 新增結束 ▲▲▲ */
 
-/* ▼▼▼ 新增：學生資料庫畫面的展開列、新增/刪除按鈕樣式 ▼▼▼ */
 .panel-header-row {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
-    margin-bottom: 20px;
+    margin-top: 20px;
 }
 
 .panel-header-row .panel-title {
@@ -1262,16 +1155,6 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     flex: 1;
 }
 
-/* ▼▼▼ 新增：本月收入學生收款狀態 ▼▼▼ */
-
-.income-check-hint {
-    display: flex;
-    gap: 16px;
-    margin: -4px 0 12px;
-    font-size: 13px;
-    color: #777;
-}
-
 .income-student-row {
     display: flex;
     align-items: center;
@@ -1341,3 +1224,281 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 
 
 /* ▲▲▲ 新增結束 ▲▲▲ */
+ /* ------------------------------------------------------------
+   ▼▼▼ 修改：Coach View 左側分頁導覽
+   ------------------------------------------------------------ */
+
+/* 整個教練後台 */
+#coach-view {
+    display: flex;
+    width: 100%;
+    min-height: calc(100vh - 40px);
+    gap: 18px;
+    align-items: stretch;
+}
+
+#student-view {
+    display: flex;
+    width: 100%;
+    min-height: calc(100vh - 40px);
+    gap: 18px;
+    align-items: stretch;
+}
+
+/* 上方主導覽 */
+.coach-nav,
+.student-nav
+ {
+    width: 100%;
+    height: 70px;
+
+    display: flex;
+    align-items: center;
+
+    padding: 0 24px;
+
+    background: #ffffff;
+    border-bottom: 1px solid #e5e7eb;
+
+    box-sizing: border-box;
+}
+
+.coach-nav-content,
+.student-nav-content {
+    display: flex;
+    align-items: center;
+}
+
+
+/* 分頁按鈕 */
+.coach-nav-btn {
+    height: 55px;
+
+    padding: 0 20px;
+
+    border: none;
+    background: transparent;
+
+    color: #6b7280;
+    font-size: 15px;
+    font-weight: 500;
+
+    cursor: pointer;
+
+    transition:
+        color 0.2s ease,
+        background-color 0.2s ease;
+
+    white-space: nowrap;
+}
+
+.student-nav-btn{
+    height: 50px;
+
+    padding: 0 20px;
+
+    border: none;
+    background: transparent;
+
+    color: #6b7280;
+    font-size: 15px;
+    font-weight: 500;
+
+    cursor: pointer;
+
+    transition:
+        color 0.2s ease,
+        background-color 0.2s ease;
+
+    white-space: nowrap;
+}
+
+
+/* 滑過 */
+.coach-nav-btn:hover {
+    background: #f3f7f7;
+    color: #263238;
+}
+
+.student-nav-btn:hover {
+    background: #f3f7f7;
+    color: #263238;
+}
+
+/* 目前所在分頁 */
+.coach-nav-btn.active {
+    background: #e8f3f1;
+    color: #098579;
+}
+
+.student-nav-btn.active{
+    background: #e8f3f1;
+    color: #098579;
+}
+
+/* 右側內容區 */
+.coach-content {
+    width: 100%;
+    min-height: calc(100vh - 64px);
+}
+
+.student-content {
+    width: 100%;
+    min-height: calc(100vh - 64px);
+    box-sizing: border-box;
+}
+
+/* 所有 Coach 分頁預設隱藏 */
+.coach-panel {
+    display: none;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+/* 目前分頁顯示 */
+.coach-panel.active {
+    display: flex;
+}
+
+/* 一般資訊頁面的內距 */
+.coach-panel > .panel-inner {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.student-panel {
+    display: none;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+.student-panel.active {
+    display: block;
+}
+
+------------------------------------------------ */
+
+
+/* ------------------------------------------------------------
+   原本的日曆 Sidebar
+   注意：這不是左側主導覽
+   ------------------------------------------------------------ */
+
+.sidebar {
+    width: 230px;
+    min-width: 230px;
+
+    background: white;
+    padding: 20px;
+
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+
+    display: flex;
+    flex-direction: column;
+}
+
+/* =========================
+   收入頁面整體
+   ========================= */
+
+#panel-income .panel-inner {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+
+/* =========================
+   上方：收入摘要
+   ========================= */
+
+.income-summary-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    width: 100%;
+    margin-bottom: 24px;
+}
+
+
+/* =========================
+   下方：左 + 右
+   ========================= */
+
+.income-analysis-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    align-items: start;
+}
+
+
+/* =========================
+   左邊：依學生分項
+   ========================= */
+
+
+.income-breakdown-section {
+    min-width: 0;
+    display: block;
+}
+
+.income-breakdown-section .panel-subtitle {
+    margin: 20px 0 12px;
+}
+
+
+.income-analysis-row .income-breakdown-section {
+    min-width: 0;
+}
+
+
+/* 標題與收款說明保持上下排列 */
+
+.income-analysis-row .income-breakdown-section > .panel-subtitle {
+    margin: 20px 0 12px;
+}
+
+
+/* 收款狀態 */
+
+.income-check-hint {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+
+/* ============================================================
+   收入折線圖
+   ============================================================ */
+
+.income-chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.income-chart-header .panel-subtitle {
+    margin: 20px 0 12px;
+}
+
+.income-chart-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+/* =========================
+   折線圖容器
+   ========================= */
+
+.income-chart-container {
+    width: 100%;
+    min-height: 350px;
+    box-sizing: border-box;
+}
+

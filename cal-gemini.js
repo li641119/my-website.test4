@@ -9,38 +9,96 @@ const presetColors = [
     '#ffc0c7', '#f5c5ff', '#b2ceff', '#c4cbff'
 ];
 
-/** 🛠️ 關鍵新增：計算指定年份與月份中，某個星期幾總共出現了幾次 (自動判斷 4 次或 5 次並扣除 exceptions) */
-function countOccurrencesInMonth(year, month, targetDay, exceptions = []) {
-    // 取得該月總天數 (month 傳入 1~12，Date 的第 0 天即為上個月最後一天，亦即當月總天數)
-    const totalDays = new Date(year, month, 0).getDate(); 
-    let count = 0;
+// ------------------------------------------------------------
+// ▼▼▼ 修改：精準計算指定月份的實際上課日期
+// ------------------------------------------------------------
 
-    for (let day = 1; day <= totalDays; day++) {
-        const currentDate = new Date(year, month - 1, day);
-        if (currentDate.getDay() === targetDay) {
-            const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            if (!exceptions.includes(dateStr)) {
-                count++;
-            }
-        }
-    }
-    return count;
+function formatLocalDate(year, monthIndex, day) {
+    return `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-// 在 cal-gemini.js 中
+function getRecurringDatesInMonth(
+    year,
+    monthIndex,
+    targetDay,
+    exceptions = [],
+    courseStartDate = null
+) {
+    const result = [];
+
+    const exceptionSet = new Set(
+        (exceptions || []).map(date => String(date))
+    );
+
+    const daysInMonth = new Date(
+        year,
+        monthIndex + 1,
+        0
+    ).getDate();
+
+    for (let day = 1; day <= daysInMonth; day++) {
+
+        const currentDate = new Date(
+            year,
+            monthIndex,
+            day
+        );
+
+        if (currentDate.getDay() !== targetDay) {
+            continue;
+        }
+
+        const dateStr = formatLocalDate(
+            year,
+            monthIndex,
+            day
+        );
+
+        if (
+            courseStartDate &&
+            dateStr < courseStartDate
+        ) {
+            continue;
+        }
+
+        if (exceptionSet.has(dateStr)) {
+            continue;
+        }
+
+        result.push(dateStr);
+    }
+
+    return result;
+}
+
+function countOccurrencesInMonth(
+    year,
+    monthIndex,
+    targetDay,
+    exceptions = [],
+    courseStartDate = null
+) {
+    return getRecurringDatesInMonth(
+        year,
+        monthIndex,
+        targetDay,
+        exceptions,
+        courseStartDate
+    ).length;
+}
+
+
 window.updateCalendarUI = function(cloudEvents) {
     try {
         console.log("📥 [updateCalendarUI] 收到雲端資料，數量：", cloudEvents ? cloudEvents.length : 0);
         
         if (!cloudEvents) return;
 
-        // 🚀【防禦 1】：確保全域變數 window.courses 與本地 courses 都成功拿到資料
         window.courses = cloudEvents;
         if (typeof courses !== 'undefined') {
             courses = cloudEvents;
         }
 
-        // 🚀【防禦 2】：檢查畫面的日期就緒了沒，沒就緒就先刷一次日期
         const testHeader = document.querySelector('.day-header');
         if (!testHeader || !testHeader.dataset || !testHeader.dataset.fullDate) {
             console.log("📅 日期資料尚未注入 DOM，正在嘗試呼叫 updateWeekDates...");
@@ -49,7 +107,6 @@ window.updateCalendarUI = function(cloudEvents) {
             }
         }
         
-        // 🚀【防禦 3】：執行渲染，並用超安全的邏輯包覆
         if (typeof renderAll === 'function') {
             renderAll(); 
         } else {
@@ -61,12 +118,10 @@ window.updateCalendarUI = function(cloudEvents) {
     }
 };
 
-// --- 1. 初始化 ---
 document.addEventListener('DOMContentLoaded', () => {
     updateWeekDates();
     loadData();
     
-    // 監聽點擊空白處新增
     const dropzone = document.getElementById('dropzone');
     if (dropzone) {
         dropzone.addEventListener('click', (e) => {
@@ -82,13 +137,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const name = this.value.trim();
             const currentCourses = window.courses || courses || [];
             
-            // 從既有課表中，由新到舊尋找這名學生的歷史紀錄
             const lastCourse = [...currentCourses].reverse().find(c => c.name === name && c.price);
             
             if (lastCourse) {
                 if (lastCourse.color) setupColorPalette(lastCourse.color);
                 
-                // 如果教練還沒打金額，自動幫教練填入他上一次的學費
                 const priceInput = document.getElementById('m-price');
                 if (priceInput && priceInput.value === "" && lastCourse.price) {
                     priceInput.value = lastCourse.price;
@@ -99,7 +152,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// --- 2. 彈窗控制 (整合編輯模式) ---
 function openModal(isEdit = false, courseData = null) { 
     const modal = document.getElementById('eventModal');
     if (!modal) return;
@@ -114,7 +166,6 @@ function openModal(isEdit = false, courseData = null) {
     list.innerHTML = names.map(n => `<option value="${n}">`).join('');
 
     if (isEdit && courseData) {
-        // --- 編輯模式：填入舊資料 ---
         document.getElementById('m-name').value = courseData.name || "";
         document.getElementById('m-price').value = courseData.price !== undefined ? courseData.price : "";
         
@@ -191,7 +242,6 @@ function selectColor(color, element) {
     if (colorInput) colorInput.value = color;
 }
 
-// --- 3. 時間運算與儲存 ---
 function timeToRow(timeStr) {
     if (!timeStr) return NaN;
     const [hrs, mins] = timeStr.split(':').map(Number);
@@ -239,7 +289,9 @@ function saveFromModal() {
     if (hasConflict && !confirm(`⚠️ 時段與 [${hasConflict.name}] 衝突，確定要排入嗎？`)) return;
 
     const dayHeaders = document.querySelectorAll('.day-header');
-    const targetHeader = Array.from(dayHeaders).find(h => h.dataset.day === (day === "8" ? "0" : (parseInt(day)-1).toString()) );
+    const targetHeader = Array.from(dayHeaders).find(
+    h => h.dataset.day === (parseInt(day, 10) - 1).toString()
+);
     const dateStr = targetHeader ? targetHeader.dataset.fullDate : new Date().toLocaleDateString('en-CA');
 
     const eventId = editingId ? editingId.toString() : Date.now().toString(); 
@@ -268,88 +320,215 @@ function saveFromModal() {
     closeModal();
 }
 
-// ------------------------------------------------------------
-// ▼▼▼ 修正：核心全月統計 (精準計算第 5 個星期幾與時數)
-// ------------------------------------------------------------
-// ------------------------------------------------------------
-// 🛠️ 修正版：核心全月統計 (防重複累加、互斥判斷)
-// ------------------------------------------------------------
-function calculateMonthlyData(targetYear, targetMonth) {
-    let totalMinutes = 0;
-    let totalIncome = 0; 
-    let studentStats = {};
 
-    const currentCourses = window.courses || courses || [];
 
-    currentCourses.forEach(course => {
-        if (!course || course.type !== 'work' || !course.name) return;
+function getCourseDurationMinutes(course) {
 
-        const hourlyRate = course.price !== undefined ? Number(course.price) : 600;
-        
-        // 🔒 精確抓取單堂分鐘數：優先用 duration (若 > 0)，否則才用格數計算
-        let singleDuration = Number(course.duration);
-        if (isNaN(singleDuration) || singleDuration <= 0) {
-            singleDuration = ((course.endRow - course.startRow) * 15) || 60;
-        }
+    const storedDuration = Number(course.duration);
 
-        let occurrences = 0;
+    if (
+        Number.isFinite(storedDuration) &&
+        storedDuration > 0
+    ) {
+        return storedDuration;
+    }
 
-        // 🔒 嚴格互斥判斷：如果是「重複課程」，就「絕對只算」重複課程的堂數，完全不看 date 欄位
-        if (course.isRepeating && course.day) {
-            const targetDay = (course.day === "8" ? 0 : parseInt(course.day, 10) - 1);
-            occurrences = countOccurrencesInMonth(
-                targetYear, 
-                targetMonth + 1, // targetMonth 是 0~11，傳給 helper 需要 1~12
-                targetDay, 
-                course.exceptions || []
-            );
-        } 
-        // 🔒 只有在「不是重複課程」時，才進入單次課程判斷
-        else if (course.date) {
-            const normDate = course.date.replace(/\//g, '-');
-            const parts = normDate.split('-');
-            if (parts.length === 3) {
-                const y = parseInt(parts[0], 10);
-                const m = parseInt(parts[1], 10) - 1; // 轉為 0~11
-                if (y === targetYear && m === targetMonth) {
-                    occurrences = 1;
-                }
-            }
-        }
+    const startRow = Number(course.startRow);
+    const endRow = Number(course.endRow);
 
-        // 只有次數 > 0 才進行累加
-        if (occurrences > 0) {
-            const courseTotalMins = singleDuration * occurrences;
-            const courseTotalIncome = (courseTotalMins / 60) * hourlyRate;
+    if (
+        Number.isFinite(startRow) &&
+        Number.isFinite(endRow) &&
+        endRow > startRow
+    ) {
+        return (endRow - startRow) * 10;
+    }
 
-            totalMinutes += courseTotalMins;
-            totalIncome += courseTotalIncome;
-
-            if (!studentStats[course.name]) {
-                studentStats[course.name] = { mins: 0, money: 0 };
-            }
-            studentStats[course.name].mins += courseTotalMins;
-            studentStats[course.name].money += courseTotalIncome;
-        }
-    });
-
-    return { totalMinutes, totalIncome, studentStats };
+    return 60;
 }
 
-// 記得掛載到 window 上供除錯與調用
-window.calculateMonthlyData = calculateMonthlyData;
+
+function normalizeCourseDate(dateValue) {
+
+    if (!dateValue) return null;
+
+    const text = String(dateValue).trim();
+
+    // YYYY-MM-DD
+    const match = text.match(
+        /^(\d{4})-(\d{1,2})-(\d{1,2})$/
+    );
+
+    if (!match) return null;
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+
+    if (
+        !Number.isInteger(year) ||
+        !Number.isInteger(month) ||
+        !Number.isInteger(day) ||
+        month < 1 ||
+        month > 12 ||
+        day < 1 ||
+        day > 31
+    ) {
+        return null;
+    }
+
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+
+function calculateMonthlyData(targetYear, targetMonth) {
+
+    let totalMinutes = 0;
+    let totalIncome = 0;
+
+    const studentStats = {};
+
+    const currentCourses =
+        window.courses || courses || [];
+
+    const monthStartDate =
+        formatLocalDate(
+            targetYear,
+            targetMonth,
+            1
+        );
+
+    const monthEndDay =
+        new Date(
+            targetYear,
+            targetMonth + 1,
+            0
+        ).getDate();
+
+    const monthEndDate =
+        formatLocalDate(
+            targetYear,
+            targetMonth,
+            monthEndDay
+        );
+
+    currentCourses.forEach(course => {
+
+        if (
+            !course ||
+            course.type !== 'work' ||
+            !course.name
+        ) {
+            return;
+        }
+
+    
+        const singleDuration =
+            getCourseDurationMinutes(course);
+
+
+        const hourlyRate =
+            Number.isFinite(Number(course.price))
+                ? Number(course.price)
+                : 600;
+
+        let actualDates = [];
+
+
+        if (
+            course.isRepeating &&
+            course.day
+        ) {
+
+            const targetDay =
+                course.day === "8"
+                    ? 0
+                    : parseInt(course.day, 10) - 1;
+
+            const courseStartDate =
+                normalizeCourseDate(course.date);
+
+            actualDates =
+                getRecurringDatesInMonth(
+                    targetYear,
+                    targetMonth,
+                    targetDay,
+                    course.exceptions || [],
+                    courseStartDate
+                );
+
+        }
+
+    
+        else if (course.date) {
+
+            const courseDate =
+                normalizeCourseDate(course.date);
+
+            if (
+                courseDate &&
+                courseDate >= monthStartDate &&
+                courseDate <= monthEndDate
+            ) {
+                actualDates = [courseDate];
+            }
+        }
+
+    
+        if (actualDates.length === 0) {
+            return;
+        }
+
+        const occurrenceCount =
+            actualDates.length;
+
+        const courseTotalMinutes =
+            singleDuration * occurrenceCount;
+
+        const courseTotalIncome =
+            (courseTotalMinutes / 60) *
+            hourlyRate;
+
+        totalMinutes += courseTotalMinutes;
+        totalIncome += courseTotalIncome;
+
+
+        if (!studentStats[course.name]) {
+
+            studentStats[course.name] = {
+                mins: 0,
+                money: 0,
+                occurrences: 0
+            };
+        }
+
+        studentStats[course.name].mins +=
+            courseTotalMinutes;
+
+        studentStats[course.name].money +=
+            courseTotalIncome;
+
+        studentStats[course.name].occurrences +=
+            occurrenceCount;
+    });
+
+    return {
+        totalMinutes,
+        totalIncome,
+        studentStats
+    };
+}
+
+window.calculateMonthlyData =
+    calculateMonthlyData;
+
 
 window.updateStats = function() {
     console.log("📊 [updateStats] 收到重新計算統計的請求");
     renderAll();
 }
 
-// ------------------------------------------------------------
-// ▼▼▼ 修改：本月收入「學生收款狀態」改為 Firebase 儲存
-// ------------------------------------------------------------
 
-// 暫存在記憶體中的收款狀態
-// 這不是永久資料，真正的資料來源是 Firebase。
 let incomePaidCache = {};
 
 let incomePaidCacheYear = null;
@@ -365,7 +544,6 @@ function getIncomePaidStatus(year, month, studentName) {
 // 從 Firebase 重新載入指定月份
 async function loadIncomePaidStatusForMonth(year, month) {
 
-    // 已經載入過同一月份，就不用重複讀取
     if (
         incomePaidCacheYear === year &&
         incomePaidCacheMonth === month
@@ -376,7 +554,6 @@ async function loadIncomePaidStatusForMonth(year, month) {
     incomePaidCacheYear = year;
     incomePaidCacheMonth = month;
 
-    // 先清空舊月份資料
     incomePaidCache = {};
 
     if (typeof window.loadIncomePaidStatuses !== 'function') {
@@ -448,13 +625,6 @@ window.toggleIncomePaid = async function (
     }
 };
 
-// ▲▲▲ 修改結束 ▲▲▲
-// ------------------------------------------------------------
-
-// ------------------------------------------------------------
-// ▼▼▼ 修改：本月收入面板改為使用 Firebase 收款紀錄
-// ------------------------------------------------------------
-
 export async function renderIncomePanel() {
 
     const year = viewDate.getFullYear();
@@ -462,10 +632,6 @@ export async function renderIncomePanel() {
 
     const monthData =
         calculateMonthlyData(year, month);
-
-    // --------------------------------------------------------
-    // 1. 先顯示時數與總收入
-    // --------------------------------------------------------
 
     const hoursEl =
         document.getElementById(
@@ -497,10 +663,6 @@ export async function renderIncomePanel() {
     if (!breakdownEl) return;
 
 
-    // --------------------------------------------------------
-    // 2. 沒有學生資料
-    // --------------------------------------------------------
-
     const entries =
         Object.entries(monthData.studentStats)
         .sort(
@@ -530,19 +692,10 @@ export async function renderIncomePanel() {
     }
 
 
-    // --------------------------------------------------------
-    // 3. 從 Firebase 載入本月份收款紀錄
-    // --------------------------------------------------------
-
     await loadIncomePaidStatusForMonth(
         year,
         month
     );
-
-
-    // --------------------------------------------------------
-    // 4. 計算已收款 / 待收款
-    // --------------------------------------------------------
 
     let paidIncome = 0;
     let pendingIncome = 0;
@@ -565,11 +718,6 @@ export async function renderIncomePanel() {
         }
     );
 
-
-    // --------------------------------------------------------
-    // 5. 更新上方收入卡片
-    // --------------------------------------------------------
-
     const paidIncomeEl =
         document.getElementById(
             'income-panel-paid-income'
@@ -590,11 +738,6 @@ export async function renderIncomePanel() {
         pendingIncomeEl.innerText =
             `$${Math.round(pendingIncome).toLocaleString()}`;
     }
-
-
-    // --------------------------------------------------------
-    // 6. 建立學生收款列表
-    // --------------------------------------------------------
 
     breakdownEl.innerHTML =
         entries.map(
@@ -647,8 +790,6 @@ export async function renderIncomePanel() {
 // 保留給 app.js / HTML 導覽列使用
 window.renderIncomePanel = renderIncomePanel;
 
-// ▲▲▲ 修改結束 ▲▲▲
-// ------------------------------------------------------------
 
 // --- 5. 繪製行程方塊 ---
 function drawEvent(course, container, dStr, col, overlapCount = 1) {
@@ -904,9 +1045,8 @@ export function renderAll() {
         }
 
         const weekDates = Array.from(dayHeaders).map(h => h.dataset.fullDate);
-        const middleDate = new Date(dayHeaders[3].dataset.fullDate);
-        const currentYear = middleDate.getFullYear();
-        const currentMonth = middleDate.getMonth();
+        const currentYear = viewDate.getFullYear();
+        const currentMonth = viewDate.getMonth();
 
         let weekTotalMinutes = 0;
         const currentCourses = window.courses || courses || [];
@@ -928,12 +1068,16 @@ export function renderAll() {
                     const dStr = header.dataset.fullDate;
                     const hDay = header.dataset.day;
 
-                    let normalizedCourseDay = (course.day === "8" ? "0" : (parseInt(course.day) - 1).toString());
+                    let normalizedCourseDay = (parseInt(course.day, 10) - 1).toString();
 
                     if (normalizedCourseDay === hDay && !isException(dStr)) {
                         pendingEvents.push({ course, dStr, col: parseInt(hDay) });
+                        // ▼▼▼ 修改：使用統一的課程時數計算 ▼▼▼
+                        
                         if (course.type === 'work') {
-                            const singleDur = Number(course.duration) || ((course.endRow - course.startRow) * 15) || 60;
+                            const singleDur =
+                                getCourseDurationMinutes(course);
+
                             weekTotalMinutes += singleDur;
                         }
                     }
@@ -943,9 +1087,12 @@ export function renderAll() {
                     const targetHeader = Array.from(dayHeaders).find(h => h.dataset.fullDate === course.date);
                     if (targetHeader) {
                         pendingEvents.push({ course, dStr: course.date, col: parseInt(targetHeader.dataset.day) });
-                        if (course.type === 'work') {
-                            const singleDur = Number(course.duration) || ((course.endRow - course.startRow) * 15) || 60;
-                            weekTotalMinutes += singleDur;
+                        // ▼▼▼ 修改：使用統一的課程時數計算 ▼▼▼
+                    if (course.type === 'work') {
+                        const singleDur =
+                            getCourseDurationMinutes(course);
+
+                        weekTotalMinutes += singleDur;
                         }
                     }
                 }
