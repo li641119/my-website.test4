@@ -196,20 +196,21 @@ if (forgotPasswordLink) {
 //登出
 const logoutButtons = [
     document.getElementById('logout-btn'),
-    document.getElementById('coach-top-logout-btn')
+    document.getElementById('coach-top-logout-btn'),
+    document.getElementById('coach-sidebar-logout-btn')
 ].filter(Boolean);
 
 logoutButtons.forEach((logoutButton) => {
 
     logoutButton.addEventListener('click', async () => {
 
+        const confirmed = confirm('確定要登出嗎？');
+        if (!confirmed) return;
+
         try {
             await signOut(auth);
-
         } catch (err) {
-
             console.error("登出失敗:", err);
-
             alert("登出失敗，請重新整理頁面再試一次");
         }
 
@@ -316,7 +317,7 @@ async function renderStudentDbPanel() {
             const name = docSnap.id;
 
             if (!data.email && !data.isStudent) return;
-            
+
             const emailText = data.email ? data.email : '（尚未註冊帳號）';
             const priceText = data.defaultPrice !== undefined ? `$${data.defaultPrice}` : '—';
             const row = template.content.cloneNode(true);
@@ -385,6 +386,7 @@ window.toggleStudentDetail = function (name) {
     detail.classList.toggle('hide');
 };
 
+// 新增學生
 window.addStudent = async function () {
     const nameInput = prompt("請輸入學生姓名：");
     if (!nameInput || !nameInput.trim()) return;
@@ -528,6 +530,7 @@ function startLiveSync() {
     });
 }
 
+// 同步student view的資料
 function startStudentLiveSync(studentName) {
     console.log(`🔒學生模式：正在同步 [${studentName}] 的課程...`);
     if (unsubscribe) unsubscribe();
@@ -700,6 +703,7 @@ window.loadIncomePaidStatuses = async function (
     }
 };
 
+// 自動記憶上課價錢
 document.addEventListener('DOMContentLoaded', () => {
     const toggleBtn = document.getElementById('toggle-income-btn');
     const incomeSpan = document.getElementById('month-income');
@@ -750,34 +754,10 @@ document.addEventListener('DOMContentLoaded', () => {
 const navBtns =
     document.querySelectorAll('.coach-nav-btn');
 
+// 登出
 navBtns.forEach((btn) => {
 
     btn.addEventListener('click', async () => {
-
-        
-        if (btn.id === 'coach-sidebar-logout-btn') {
-
-            const confirmed =
-                confirm('確定要登出嗎？');
-
-            if (!confirmed) return;
-
-            try {
-                await signOut(auth);
-            } catch (err) {
-                console.error(
-                    "登出失敗:",
-                    err
-                );
-
-                alert(
-                    "登出失敗，請重新整理頁面再試一次"
-                );
-            }
-
-            return;
-        }
-
 
         const targetPanelId =
             btn.dataset.panel;
@@ -798,9 +778,6 @@ navBtns.forEach((btn) => {
                 );
 
             });
-
-
-       
 
         if (targetPanelId === 'panel-income' &&
             typeof window.renderIncomePanel === 'function') {
