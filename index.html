@@ -78,18 +78,41 @@
             <button type="button" class="coach-nav-btn" data-panel="panel-students">👥 學生資訊</button>
             <button type="button" class="coach-nav-btn" data-panel="panel-income">💰 財務報表</button>
             <button type="button" class="coach-nav-btn" id="logout-btn">登出</button>
-
-                <div class="coach-nav-divider"></div>
         </aside>
 
         <main class="coach-content">
             <!--資訊總覽，尚未補上-->
-            <div class="coach-panel active" id="panel-overview" data-panel-id="panel-overview">
+            <div class="coach-panel" id="panel-overview" data-panel-id="panel-overview">
                 <div class="panel-inner">
-                    <div class="panel-header-row">
+
+                    <div class="overview-grid">
+                        <div class="overview-edit-col">
+                            <h3 class="panel-subtitle">停課公告</h3>
+                            <textarea id="overview-notice-input" rows="4" placeholder="例如：10/4~10/6 中秋連假暫停上課，祝大家中秋快樂！"></textarea>
+
+                            <h3 class="panel-subtitle">下周可預約時段</h3>
+                            <textarea id="overview-slots-input" rows="4" placeholder="一行一個時段，例如：9/23 (三) 19:00-20:00 A場館"></textarea>
+                        </div>
+                        <div class="overview-action-col">
+                            <button type="button" class="overview-save-btn" onclick="saveOverviewDraft()">暫存</button>
+                            <button type="button" class="overview-publish-btn" onclick="publishOverview()">更新</button>
+                        </div>
+                    </div>
+
+                    <div class="overview-stats-row">
+                        <div class="overview-stat-block">
+                            <h3 class="panel-subtitle">工作時數</h3>
+                            <p>當週：<strong id="overview-week-hours">0</strong> 小時，當月：<strong id="overview-month-hours">0</strong> 小時</p>
+                        </div>
+                        <div class="overview-stat-block">
+                            <h3 class="panel-subtitle">收入</h3>
+                            <p>當月收入：<strong id="overview-month-income" class="income-amount">0</strong> 元
+                                <button type="button" id="overview-income-toggle" class="toggle-income-btn">查看</button>
+                            </p>
                         </div>
                     </div>
                 </div>
+            </div>
 
             <!--課程日曆，剩下排版-->
             <div class="coach-panel" id="panel-calendar" data-panel-id="panel-calendar">
@@ -137,7 +160,7 @@
                         <div class="day-header" data-day="6">
                             <span class="date-label"></span>(六)
                         </div>
-                        <div class="day-header" data-day="7">
+                        <div class="day-header" data-day="0">
                             <span class="date-label"></span>(日)
                         </div>
                 
@@ -307,6 +330,11 @@
                 <span class="repeat-text">🔄 每週重複 (固定行程)</span>
             </label>
 
+            <div id="repeat-end-wrapper" class="hide" style="margin-top: 8px;">
+                <label for="m-repeat-end">重複到（留空＝不限期）：</label>
+                <input type="date" id="m-repeat-end">
+            </div>
+
             <div class="modal-buttons">
                 <button type= "button" class="btn-save save-btn" onclick="saveFromModal()" >儲存行程</button>
                 <button type= "button" class="btn-cancel" onclick="closeModal()">取消</button>
@@ -317,46 +345,69 @@
 <!--student view-->
     <div id="student-view" style="display: none;">
         <!-- 置頂分頁 -->
-
-        <aside class="student-nav">
-            <button type="button" class="student-nav-btn active" data-student-panel="student-panel-overview">🏠 首頁</button>
-            <button type="button" class="student-nav-btn" data-student-panel="student-panel-calendar">📅 課程日曆</button>
-            <button type="button" class="student-nav-btn" data-student-panel="student-panel-record">💰 上課紀錄</button>
+        <div class="student-nav">
+            <button type="button" class="student-nav-btn active" data-panel="panel-student-home">🏠 首頁</button>
+            <button type="button" class="student-nav-btn" data-panel="panel-student-calendar">📅 課程日曆</button>
+            <button type="button" class="student-nav-btn" data-panel="panel-student-history">💰 上課紀錄</button>
             <button type="button" class="student-nav-btn" id="student-logout-btn">登出</button>
-        </aside>
+        </div>
         
-        <main class="student-content">
-            <!-- 首頁 -->
-            <div class="student-panel active" id="student-panel-overview" data-student-panel-id="student-panel-overview">
-                <div class="student-header">
-                    <!--需補上登入後顯示該生名字-->
-                    <h2> Welcome back!<span id="student-name-display">同學</span></h2>
-                    <div class="student-stats-row">
-                        <div class="student-stat-card">
-                            <span>本月上課時數</span>
-                            <span class="stat-value" id="student-total-hours">0.0</span>
-                        </div>
-                        <div class="student-stat-card">
-                            <span>繳費情形</span>
-                            <span class="stat-value" id="student-class-count">未繳費</span>
-                        </div>
+        <div class="student-panel active" id="panel-student-home" data-panel-id="panel-student-home">
+        <!-- 首頁 -->
+            <div class="student-notice-card">
+                <h3>📢 停課公告</h3>
+                <p id="student-notice-content">讀取中...</p>
+            </div>
+
+            <div class="student-slots-card">
+                <h3>🗓️ 下週可預約時段</h3>
+                <div id="student-slots-content">讀取中...</div>
+            </div>
+                
+            <div class="student-header">
+                <!--需補上登入後顯示該生名字-->
+                <h2> Welcome back!<span id="student-name-display">同學</span></h2>
+                <div class="student-stats-row">
+                    <div class="student-stat-card">
+                        <span>本月上課時數</span>
+                        <span class="stat-value" id="student-total-hours">0.0</span>
+                    </div>
+                    <div class="student-stat-card">
+                        <span>繳費情形</span>
+                        <span class="stat-value" id="student-class-count">未繳費</span>
                     </div>
                 </div>
             </div>
-            <!-- 我的課程 -->   
-            <div class="student-panel" id="student-panel-calendar" data-student-panel-id="student-panel-calendar">
-                <div class="calendar-container">
-                    <div id="student-calendar-grid"></div>
-                </div>
+        </div>
+
+        <!-- 我的課程 -->   
+        <div class="student-panel" id="panel-student-calendar" data-panel-id="panel-student-calendar">
+            <div class="month-calendar-header">
+                <button type="button" onclick="changeStudentMonth(-1)">⬅️</button>
+                <h3 id="student-month-label">讀取中...</h3>
+                <button type="button" onclick="changeStudentMonth(1)">➡️</button>
             </div>
+            <div class="month-calendar-grid" id="student-month-grid"></div>
+            <div class="month-day-detail" id="student-day-detail">
+                <p class="no-data-hint">點選上面有標色的日期查看上課細節</p>
+            </div>
+        </div>
+
             <!-- 上課紀錄 -->
-            <div class="student-panel" id="student-panel-record" data-student-panel-id="student-panel-record">
-                <div class="student-record-container">
-                    <h3>💰 我的紀錄</h3>
-                    <p class="no-data-hint"> 之後可以在這裡放上課紀錄、繳費紀錄等資訊</p>
-                </div>
+        <div class="student-panel" id="panel-student-history" data-panel-id="panel-student-history">
+            <h2 class="panel-title">上課紀錄查詢</h2>
+            <div class="history-query-row">
+                <input type="date" id="student-history-start">
+                <span>至</span>
+                <input type="date" id="student-history-end">
+                <button type="button" onclick="queryMyHistory()">查詢</button>
             </div>
-        </main>
+            <p class="history-result" id="student-history-result">選擇開始與結束日期後點「查詢」</p>
+        </div>
+        
+        <div style="display:none;">
+            <div id="student-calendar-grid"></div>
+        </div>
     </div>
 
     

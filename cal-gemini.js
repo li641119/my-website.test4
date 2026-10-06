@@ -22,7 +22,8 @@ function getRecurringDatesInMonth(
     monthIndex,
     targetDay,
     exceptions = [],
-    courseStartDate = null
+    courseStartDate = null,
+    courseEndDate = null
 ) {
     const result = [];
 
@@ -57,6 +58,13 @@ function getRecurringDatesInMonth(
         if (
             courseStartDate &&
             dateStr < courseStartDate
+        ) {
+            continue;
+        }
+
+        if (
+            courseEndDate &&
+            dateStr > courseEndDate
         ) {
             continue;
         }
@@ -150,6 +158,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    const repeatCheckbox = document.getElementById('m-repeat');
+    if (repeatCheckbox) {
+        repeatCheckbox.addEventListener('change', toggleRepeatEndVisibility);
+    }
 });
 
 function openModal(isEdit = false, courseData = null) { 
@@ -184,6 +197,7 @@ function openModal(isEdit = false, courseData = null) {
         document.getElementById('m-start').value = courseData.start;
         document.getElementById('m-end').value = courseData.end;
         document.getElementById('m-repeat').checked = courseData.isRepeating;
+        document.getElementById('m-repeat-end').value = courseData.repeatEndDate || '';
         setupColorPalette(courseData.color);
         if (submitBtn) submitBtn.innerText = "更新行程"; // 改變按鈕文字
     } else {
@@ -193,8 +207,10 @@ function openModal(isEdit = false, courseData = null) {
         document.getElementById('m-loc-custom').value = "";
         document.getElementById('m-loc-custom').style.display = 'none';
         document.getElementById('m-repeat').checked = false;
+        document.getElementById('m-repeat-end').value = '';
         if (submitBtn) submitBtn.innerText = "儲存行程";
         setupColorPalette(); 
+        toggleRepeatEndVisibility();
     }
 }
 
@@ -288,15 +304,20 @@ function saveFromModal() {
     });
     if (hasConflict && !confirm(`⚠️ 時段與 [${hasConflict.name}] 衝突，確定要排入嗎？`)) return;
 
-    const dayHeaders = document.querySelectorAll('.day-header');
-    const targetHeader = Array.from(dayHeaders).find(
-    h => h.dataset.day === (parseInt(day, 10) - 1).toString()
-);
-    const dateStr = targetHeader ? targetHeader.dataset.fullDate : new Date().toLocaleDateString('en-CA');
-
     const eventId = editingId ? editingId.toString() : Date.now().toString(); 
-    
+
     const editingCourse = editingId ? currentCourses.find(c => c.id.toString() === editingId.toString()) : null;
+
+    let dateStr;
+    if (editingCourse && editingCourse.isRepeating && isRepeating) {
+        // 編輯「本來就是重複課程」的課，保留原本的開始日期，
+        // 不要被目前瀏覽的週次覆蓋掉，避免開始日期無聲無息跑掉
+        dateStr = editingCourse.date;
+    } else {
+        const dayHeaders = document.querySelectorAll('.day-header');
+        const targetHeader = Array.from(dayHeaders).find(h => h.dataset.day === (day === "8" ? "0" : (parseInt(day)-1).toString()) );
+        dateStr = targetHeader ? targetHeader.dataset.fullDate : new Date().toLocaleDateString('en-CA');
+    }
 
     const courseData = { 
         id: eventId, 
@@ -308,7 +329,8 @@ function saveFromModal() {
         date: dateStr, 
         isRepeating, 
         color: eventColor, 
-        exceptions: editingCourse && editingCourse.exceptions ? editingCourse.exceptions : []
+        exceptions: editingCourse && editingCourse.exceptions ? editingCourse.exceptions : [],
+        repeatEndDate: isRepeating ? (document.getElementById('m-repeat-end').value || null) : null,
     };
 
     console.log("📤 準備上傳:", courseData);
@@ -319,8 +341,6 @@ function saveFromModal() {
 
     closeModal();
 }
-
-
 
 function getCourseDurationMinutes(course) {
 
@@ -380,6 +400,11 @@ function normalizeCourseDate(dateValue) {
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+function isDateWithinRepeatRange(course, dStr) {
+    if (course.date && dStr < course.date) return false;
+    if (course.repeatEndDate && dStr > course.repeatEndDate) return false;
+    return true;
+}
 
 function calculateMonthlyData(targetYear, targetMonth) {
 
@@ -454,7 +479,8 @@ function calculateMonthlyData(targetYear, targetMonth) {
                     targetMonth,
                     targetDay,
                     course.exceptions || [],
-                    courseStartDate
+                    courseStartDate,
+                    course.repeatEndDate || null
                 );
 
         }
@@ -982,6 +1008,15 @@ function toggleCustomLoc() {
     }
 }
 
+function toggleRepeatEndVisibility() {
+    const repeatCheckbox = document.getElementById('m-repeat');
+    const wrapper = document.getElementById('repeat-end-wrapper');
+    if (repeatCheckbox && wrapper) {
+        wrapper.classList.toggle('hide', !repeatCheckbox.checked);
+    }
+}
+
+
 function saveToStorage() { 
     const currentCourses = window.courses || courses || [];
     localStorage.setItem('coach_data_v3', JSON.stringify(currentCourses)); 
@@ -1068,9 +1103,9 @@ export function renderAll() {
                     const dStr = header.dataset.fullDate;
                     const hDay = header.dataset.day;
 
-                    let normalizedCourseDay = (parseInt(course.day, 10) - 1).toString();
+                    let normalizedCourseDay = (course.day === "8" ? "0" : (parseInt(course.day, 10) - 1).toString());
 
-                    if (normalizedCourseDay === hDay && !isException(dStr)) {
+                    if (normalizedCourseDay === hDay && !isException(dStr) && isDateWithinRepeatRange(course, dStr)) {
                         pendingEvents.push({ course, dStr, col: parseInt(hDay) });
                         // ▼▼▼ 修改：使用統一的課程時數計算 ▼▼▼
                         
@@ -1261,3 +1296,88 @@ window.goToday = goToday;
 window.toggleCustomLoc = toggleCustomLoc;
 window.clearWorkData = clearWorkData;
 window.updateStudentColor = updateStudentColor;
+
+// ------------------------------------------------------------
+// 學生端：課程日曆（月曆格式）
+// ------------------------------------------------------------
+let studentCalendarDate = new Date();
+
+function isWorkDayForStudent(studentName, course, dStr) {
+    if (!course || course.type !== 'work' || course.name !== studentName) return false;
+
+    if (course.isRepeating) {
+        const targetDay = (course.day === "8" ? 0 : parseInt(course.day, 10) - 1);
+        const d = new Date(`${dStr}T00:00:00`);
+        if (d.getDay() !== targetDay) return false;
+
+        const exceptions = course.exceptions || [];
+        if (exceptions.includes(dStr)) return false;
+
+        return isDateWithinRepeatRange(course, dStr);
+    } else {
+        return course.date === dStr;
+    }
+}
+
+function getStudentCoursesOnDate(studentName, dStr) {
+    const all = window.courses || [];
+    return all.filter((c) => isWorkDayForStudent(studentName, c, dStr));
+}
+
+window.changeStudentMonth = function (direction) {
+    studentCalendarDate.setMonth(studentCalendarDate.getMonth() + direction);
+    renderStudentMonthCalendar();
+};
+
+function renderStudentMonthCalendar() {
+    const gridEl = document.getElementById('student-month-grid');
+    const labelEl = document.getElementById('student-month-label');
+    if (!gridEl || !currentUser || !currentUser.name) return;
+
+    const year = studentCalendarDate.getFullYear();
+    const month = studentCalendarDate.getMonth();
+    if (labelEl) labelEl.innerText = `${year}年 ${month + 1}月`;
+
+    const firstDay = new Date(year, month, 1);
+    const startOffset = firstDay.getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    const weekdayLabels = ['日', '一', '二', '三', '四', '五', '六'];
+
+    let html = weekdayLabels.map((w) => `<div class="month-weekday">${w}</div>`).join('');
+
+    for (let i = 0; i < startOffset; i++) {
+        html += `<div class="month-cell empty"></div>`;
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const hasClass = getStudentCoursesOnDate(currentUser.name, dStr).length > 0;
+        let cls = 'month-cell';
+        if (hasClass) {
+            cls += dStr < todayStr ? ' day-done' : ' day-upcoming';
+        }
+        html += `<div class="${cls}" onclick="showStudentDayDetail('${dStr}')">${day}</div>`;
+    }
+
+    gridEl.innerHTML = html;
+}
+window.renderStudentMonthCalendar = renderStudentMonthCalendar;
+
+window.showStudentDayDetail = function (dStr) {
+    const detailEl = document.getElementById('student-day-detail');
+    if (!detailEl || !currentUser) return;
+
+    const matches = getStudentCoursesOnDate(currentUser.name, dStr);
+    if (matches.length === 0) {
+        detailEl.innerHTML = `<p class="no-data-hint">${dStr} 沒有課程</p>`;
+        return;
+    }
+
+    detailEl.innerHTML = matches.map((c) => `
+        <div class="db-row">
+            <span class="db-name">${dStr}</span>
+            <span class="db-meta">⏰ ${c.start}-${c.end} · 📍 ${c.loc}</span>
+        </div>
+    `).join('');
+};

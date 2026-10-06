@@ -273,6 +273,7 @@ onAuthStateChanged(auth, async (user) => {
 
             console.log("啟動學生模式，姓名比對用:", studentName || '(尚未找到對應姓名)');
             startStudentLiveSync(studentName);
+            watchOverviewForStudent();
         }
 
         renderAll();
@@ -375,6 +376,160 @@ async function renderStudentDbPanel() {
             '<p class="no-data-hint">讀取失敗，請重新整理再試一次</p>';
     }
 }
+
+// ------------------------------------------------------------
+// 資訊總覽：停課公告 + 下週時段 + 工時 + 收入
+// ------------------------------------------------------------
+const OVERVIEW_DOC_ID = 'content';
+
+// 暫存：只存草稿，學生端不會看到變化
+window.saveOverviewDraft = async function () {
+    const notice = document.getElementById('overview-notice-input').value;
+    const slots = document.getElementById('overview-slots-input').value;
+    try {
+        await setDoc(doc(db, "overview", OVERVIEW_DOC_ID), {
+            noticeDraft: notice,
+            slotsDraft: slots,
+            updatedAt: new Date().toISOString()
+        }, { merge: true });
+        alert('已暫存');
+    } catch (err) {
+        console.error('暫存失敗:', err);
+        alert('暫存失敗，請稍後再試');
+    }
+};
+
+// 更新：草稿跟正式發布版一起存，學生端會立刻看到
+window.publishOverview = async function () {
+    const notice = document.getElementById('overview-notice-input').value;
+    const slots = document.getElementById('overview-slots-input').value;
+    const sure = confirm('確定要更新嗎？學生會立刻看到最新內容。');
+    if (!sure) return;
+    try {
+        await setDoc(doc(db, "overview", OVERVIEW_DOC_ID), {
+            noticeDraft: notice,
+            noticeLive: notice,
+            slotsDraft: slots,
+            slotsLive: slots,
+            updatedAt: new Date().toISOString()
+        }, { merge: true });
+        alert('✅ 已更新，學生端會同步顯示');
+    } catch (err) {
+        console.error('更新失敗:', err);
+        alert('更新失敗，請稍後再試');
+    }
+};
+
+// 教練打開「總覽」分頁時，把草稿內容帶回輸入框
+async function loadOverviewEditor() {
+    try {
+        const snap = await getDoc(doc(db, "overview", OVERVIEW_DOC_ID));
+        const data = snap.exists() ? snap.data() : {};
+        const noticeInput = document.getElementById('overview-notice-input');
+        const slotsInput = document.getElementById('overview-slots-input');
+        if (noticeInput) noticeInput.value = data.noticeDraft || '';
+        if (slotsInput) slotsInput.value = data.slotsDraft || '';
+    } catch (err) {
+        console.error('讀取總覽草稿失敗:', err);
+    }
+}
+
+// 工時／收入：用「今天」實際日期計算，不受行事曆目前瀏覽到哪一週/哪個月影響
+function renderOverviewStats() {
+    const courses = window.courses || [];
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+
+    const monthData = (typeof window.calculateMonthlyData === 'function')
+        ? window.calculateMonthlyData(year, month)
+        : { totalMinutes: 0, totalIncome: 0 };
+
+    const dayOfWeek = today.getDay();
+    const offset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + offset);
+    monday.setHours(0, 0, 0, 0);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+
+    let weekMinutes = 0;
+    courses.forEach((course) => {
+        if (!course || course.type !== 'work') return;
+        const duration = Number(course.duration || 0);
+
+        if (course.isRepeating) {
+            const targetDay = (course.day === "8" ? 0 : parseInt(course.day, 10) - 1);
+            const exceptions = course.exceptions || [];
+            for (let i = 0; i < 7; i++) {
+                const d = new Date(monday);
+                d.setDate(monday.getDate() + i);
+                if (d.getDay() !== targetDay) continue;
+                const dStr = d.toLocaleDateString('en-CA');
+                if (exceptions.includes(dStr)) continue;
+                if (course.date && dStr < course.date) continue;
+                weekMinutes += duration;
+            }
+        } else {
+            if (!course.date) return;
+            const cDate = new Date(`${course.date}T00:00:00`);
+            if (cDate >= monday && cDate <= sunday) weekMinutes += duration;
+        }
+    });
+
+    const weekEl = document.getElementById('overview-week-hours');
+    const monthEl = document.getElementById('overview-month-hours');
+    const incomeEl = document.getElementById('overview-month-income');
+    if (weekEl) weekEl.innerText = (weekMinutes / 60).toFixed(1);
+    if (monthEl) monthEl.innerText = (monthData.totalMinutes / 60).toFixed(1);
+    if (incomeEl) incomeEl.innerText = Math.round(monthData.totalIncome).toLocaleString();
+}
+
+// 導覽列點「總覽」時會呼叫這個（你貼的程式碼裡已經有呼叫 window.renderOverviewPanel 的地方了）
+window.renderOverviewPanel = function () {
+    loadOverviewEditor();
+    renderOverviewStats();
+};
+
+// 收入數字的模糊/顯示切換（跟側邊欄那個是同一套邏輯，另外獨立一份給總覽頁用）
+document.addEventListener('DOMContentLoaded', () => {
+    const toggleBtn2 = document.getElementById('overview-income-toggle');
+    const incomeSpan2 = document.getElementById('overview-month-income');
+    if (toggleBtn2 && incomeSpan2) {
+        toggleBtn2.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const isRevealed = incomeSpan2.classList.toggle('revealed');
+            toggleBtn2.innerHTML = isRevealed ? '隱藏' : '查看';
+        });
+    }
+});
+
+// 學生端：即時監聽公告/時段，教練一按「更新」就會同步顯示
+function watchOverviewForStudent() {
+    try {
+        onSnapshot(doc(db, "overview", OVERVIEW_DOC_ID), (snap) => {
+            const data = snap.exists() ? snap.data() : {};
+
+            const noticeEl = document.getElementById('student-notice-content');
+            if (noticeEl) noticeEl.innerText = data.noticeLive || '目前沒有公告';
+
+            const slotsEl = document.getElementById('student-slots-content');
+            if (slotsEl) {
+                const lines = (data.slotsLive || '').split('\n').map((s) => s.trim()).filter(Boolean);
+                if (lines.length === 0) {
+                    slotsEl.innerHTML = '<p class="no-data-hint">目前沒有公告時段</p>';
+                } else {
+                    slotsEl.innerHTML = lines.map((line) => `<div class="slot-chip">${line}</div>`).join('');
+                }
+            }
+        });
+    } catch (err) {
+        console.error('監聽總覽資料失敗:', err);
+    }
+}
+
 
 // 點姓名展開、收合堂數區塊（一次只展開一個，避免畫面太亂）
 window.toggleStudentDetail = function (name) {
@@ -547,76 +702,19 @@ function startStudentLiveSync(studentName) {
     
     unsubscribe = onSnapshot(q, (snapshot) => {
         const myEvents = [];
-        let totalMinutes = 0;
-        let unpaidCount = 0;
-
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth() + 1; // 1 ~ 12 月
 
         snapshot.forEach((docSnap) => {
             const data = docSnap.data();
             myEvents.push({ ...data, id: data.id ? data.id.toString() : docSnap.id });
-
-            // A. 單次課程統計 (精確用字串拆解年/月，避免 UTC 時區偏差)
-            if (data.date && !data.isRepeating) {
-                const parts = data.date.split('-');
-                if (parts.length === 3) {
-                    const y = parseInt(parts[0], 10);
-                    const m = parseInt(parts[1], 10);
-
-                    if (y === currentYear && m === currentMonth) {
-                        const duration =
-                            Number(data.duration) > 0
-                                ? Number(data.duration)
-                                : (
-                                    Number(data.endRow) > Number(data.startRow)
-                                        ? (Number(data.endRow) - Number(data.startRow)) * 10
-                                        : 60
-                                );
-                        totalMinutes += Number(duration);
-
-                        if (data.type === 'work' && data.isPaid !== true) {
-                            unpaidCount++;
-                        }
-                    }
-                }
-            } 
-            else if (data.isRepeating && data.day) {
-                const targetDay = (data.day === "8" ? 0 : parseInt(data.day, 10) - 1);
-                
-                const realClassCount = countOccurrencesInMonth(
-                    currentYear, 
-                    currentMonth, 
-                    targetDay, 
-                    data.exceptions || []
-                );
-
-                const singleDuration = data.duration || ((data.endRow - data.startRow) * 15) || 60;
-                totalMinutes += Number(singleDuration) * realClassCount;
-
-                if (data.type === 'work' && data.isPaid !== true) {
-                    unpaidCount += realClassCount;
-                }
-            }
         });
 
-        const hoursEl = document.getElementById('student-total-hours');
-        if (hoursEl) hoursEl.innerText = (totalMinutes / 60).toFixed(1);
-
-        const statusDisplay = document.getElementById('student-class-count');
-        if (statusDisplay) {
-            if (unpaidCount > 0) {
-                statusDisplay.innerText = `有 ${unpaidCount} 堂未繳費`;
-                statusDisplay.style.color = '#e74c3c';
-            } else {
-                statusDisplay.innerText = '已全數繳清 ✨';
-                statusDisplay.style.color = '#098579';
-            }
-        }
 
         if (window.updateCalendarUI) {
             window.updateCalendarUI(myEvents);
+        }
+
+        if (typeof window.renderStudentMonthCalendar === 'function') {
+            window.renderStudentMonthCalendar();
         }
     });
 }
@@ -807,6 +905,90 @@ navBtns.forEach((btn) => {
 
 });
 
+// 學生端標籤頁切換
+document.addEventListener('DOMContentLoaded', () => {
+    const studentNavBtns = document.querySelectorAll('.student-nav-btn');
+    studentNavBtns.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const targetPanelId = btn.dataset.panel;
+            studentNavBtns.forEach((b) => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            document.querySelectorAll('.student-panel').forEach((panel) => {
+                panel.classList.toggle('active', panel.dataset.panelId === targetPanelId);
+            });
+
+            if (targetPanelId === 'panel-student-calendar' && typeof window.renderStudentMonthCalendar === 'function') {
+                window.renderStudentMonthCalendar();
+            }
+        });
+    });
+});
+
+// 學生自己查詢上課紀錄：邏輯跟教練端的 queryStudentHistory 一樣，
+// 差別只在不用選學生，自動用自己的名字
+window.queryMyHistory = function () {
+    if (!currentUser || !currentUser.name) return;
+
+    const startInput = document.getElementById('student-history-start');
+    const endInput = document.getElementById('student-history-end');
+    const resultEl = document.getElementById('student-history-result');
+    if (!startInput.value || !endInput.value) {
+        resultEl.innerText = '請選擇開始與結束日期';
+        return;
+    }
+
+    const startDate = new Date(`${startInput.value}T00:00:00`);
+    const endDate = new Date(`${endInput.value}T00:00:00`);
+    if (startDate > endDate) {
+        resultEl.innerText = '開始日期不能晚於結束日期';
+        return;
+    }
+
+    const allCourses = window.courses || [];
+    const myCourses = allCourses.filter((c) => c && c.type === 'work' && c.name === currentUser.name);
+
+    let count = 0;
+    let totalMinutes = 0;
+    let totalMoney = 0;
+
+    myCourses.forEach((course) => {
+        const hourlyRate = course.price !== undefined ? Number(course.price) : 600;
+        const duration = Number(course.duration || 0);
+
+        if (course.isRepeating) {
+            const targetDay = (course.day === "8" ? 0 : parseInt(course.day) - 1);
+            const exceptions = course.exceptions || [];
+            let cursor = new Date(startDate);
+            while (cursor <= endDate) {
+                if (cursor.getDay() === targetDay) {
+                    const dStr = cursor.toLocaleDateString('en-CA');
+                    if (!exceptions.includes(dStr)) {
+                        count++;
+                        totalMinutes += duration;
+                        totalMoney += (duration / 60) * hourlyRate;
+                    }
+                }
+                cursor.setDate(cursor.getDate() + 1);
+            }
+        } else {
+            if (!course.date) return;
+            const courseDate = new Date(`${course.date}T00:00:00`);
+            if (courseDate >= startDate && courseDate <= endDate) {
+                count++;
+                totalMinutes += duration;
+                totalMoney += (duration / 60) * hourlyRate;
+            }
+        }
+    });
+
+    if (count === 0) {
+        resultEl.innerHTML = '這段期間查無上課紀錄';
+        return;
+    }
+
+    resultEl.innerHTML = `共 <strong>${count}</strong> 堂課（${(totalMinutes / 60).toFixed(1)} 小時），總金額 <strong>$${Math.round(totalMoney).toLocaleString()}</strong>`;
+};
 
 window.renderCoachOverview = function () {
 
