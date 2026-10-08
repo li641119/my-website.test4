@@ -3,6 +3,7 @@ import { currentUser } from './app.js';
 let courses = [];
 let viewDate = new Date(); 
 let editingId = null; // 【編輯功能關鍵】用於追蹤正在編輯的行程 ID
+let editingDateStr = null; // 目前編輯的是哪一天的方塊（「只刪本週」要用）
 
 const presetColors = [
     '#c2bcbc', '#b5e3db', '#d5e3c7', '#efe78e', '#fad595', 
@@ -165,11 +166,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-function openModal(isEdit = false, courseData = null) { 
+function openModal(isEdit = false, courseData = null, dateStr = null) { 
     const modal = document.getElementById('eventModal');
     if (!modal) return;
     const submitBtn = modal.querySelector('button[onclick="saveFromModal()"]');
     editingId = isEdit ? courseData.id : null; // 設定目前是否為編輯模式
+    editingDateStr = isEdit ? dateStr : null;
 
     modal.style.display = 'block'; 
 
@@ -211,6 +213,7 @@ function openModal(isEdit = false, courseData = null) {
         if (submitBtn) submitBtn.innerText = "儲存行程";
         setupColorPalette(); 
         toggleRepeatEndVisibility();
+        updateModalDeleteButtons(isEdit, courseData, dateStr);
     }
 }
 
@@ -226,10 +229,104 @@ function createStudentList() {
     return dl;
 }
 
+// ------------------------------------------------------------
+// 共用刪除邏輯：右鍵刪除和彈窗裡的刪除按鈕都呼叫這兩個函式，
+// 避免同一套邏輯寫兩份、改一邊忘了另一邊。
+// 「刪單次課程」和「刪整個循環」其實是同一個動作（把整筆文件刪掉），所以合併成一個函式。
+// ------------------------------------------------------------
+function deleteCourseDocument(course) {
+    const idStr = course.id.toString();
+    if (typeof window.removeEventFromCloud === 'function') {
+        window.removeEventFromCloud(idStr);
+    }
+    window.courses = (window.courses || []).filter(c => c.id.toString() !== idStr);
+    courses = courses.filter(c => c.id.toString() !== idStr);
+    renderAll();
+}
+
+function deleteCourseOccurrence(course, dStr) {
+    if (!course.exceptions) course.exceptions = [];
+    if (course.exceptions.includes(dStr)) {
+        alert("該日期已在刪除清單中");
+        return;
+    }
+    course.exceptions.push(dStr);
+
+    const idStr = course.id.toString();
+    const idx = courses.findIndex(c => c.id.toString() === idStr);
+    if (idx !== -1) courses[idx] = course;
+    if (window.courses) {
+        const wIdx = window.courses.findIndex(c => c.id.toString() === idStr);
+        if (wIdx !== -1) window.courses[wIdx] = course;
+    }
+
+    if (typeof window.uploadEvent === 'function') {
+        window.uploadEvent(course);
+    }
+    renderAll();
+}
+
+// 依照點開的是「單次」還是「重複」課程，決定彈窗裡顯示哪幾顆刪除按鈕
+function updateModalDeleteButtons(isEdit, courseData, dateStr) {
+    const area = document.getElementById('modal-delete-area');
+    if (!area) return;
+
+    if (!isEdit || !courseData) {
+        area.classList.add('hide');
+        return;
+    }
+
+    area.classList.remove('hide');
+    const singleBtn = document.getElementById('btn-delete-single');
+    const weekBtn = document.getElementById('btn-delete-this-week');
+    const allBtn = document.getElementById('btn-delete-all');
+
+    // 這裡看的是「已存檔的課程」是不是重複，不是彈窗裡勾選框目前的狀態
+    if (courseData.isRepeating) {
+        singleBtn.classList.add('hide');
+        weekBtn.classList.remove('hide');
+        allBtn.classList.remove('hide');
+        weekBtn.innerText = dateStr ? `🗑️ 只刪本週（${dateStr}）` : '🗑️ 只刪本週';
+    } else {
+        singleBtn.classList.remove('hide');
+        weekBtn.classList.add('hide');
+        allBtn.classList.add('hide');
+    }
+}
+
+function deleteFromModal(mode) {
+    if (!editingId) return;
+    const currentCourses = window.courses || courses || [];
+    const course = currentCourses.find(c => c.id.toString() === editingId.toString());
+    if (!course) return;
+
+    if (mode === 'single') {
+        if (confirm(`確定要刪除 [${course.name}] 嗎？`)) {
+            deleteCourseDocument(course);
+            closeModal();
+        }
+    } else if (mode === 'thisWeek') {
+        if (!editingDateStr) {
+            alert('找不到要刪除的日期，請關閉後重新點選該週的課程');
+            return;
+        }
+        if (confirm(`確定只刪除 ${editingDateStr} 這一天的 [${course.name}] 嗎？其他週次不受影響。`)) {
+            deleteCourseOccurrence(course, editingDateStr);
+            closeModal();
+        }
+    } else if (mode === 'all') {
+        if (confirm(`⚠️ 警告：這將刪除所有週次的 [${course.name}]，確定嗎？`)) {
+            deleteCourseDocument(course);
+            closeModal();
+        }
+    }
+}
+
 function closeModal() { 
     const modal = document.getElementById('eventModal');
     if (modal) modal.style.display = 'none'; 
     editingId = null;
+    editingDateStr = null;
 }
 
 function setupColorPalette(selectedColor = presetColors[0]) {
@@ -858,58 +955,25 @@ function drawEvent(course, container, dStr, col, overlapCount = 1) {
 
     div.onclick = (e) => { 
         e.stopPropagation(); 
-        openModal(true, course); 
+        openModal(true, course, dStr); 
     };
 
+    // 桌機右鍵刪除保留，邏輯改成呼叫上面的共用函式
     div.oncontextmenu = (e) => {
         e.preventDefault();
         e.stopPropagation();
 
-        const idStr = course.id.toString();
-
         if (!course.isRepeating) {
             if (confirm(`確定要刪除 [${course.name}] 嗎？`)) {
-                if (typeof window.removeEventFromCloud === 'function') {
-                    window.removeEventFromCloud(idStr);
-                }
-                if (typeof window.courses !== 'undefined') {
-                    window.courses = window.courses.filter(c => c.id.toString() !== idStr);
-                }
-                courses = courses.filter(c => c.id.toString() !== idStr);
-                renderAll();
+                deleteCourseDocument(course);
             }
         } else {
             const action = prompt("請選擇刪除方式：\n1. 僅刪除本週 (" + dStr + ")\n2. 永久刪除整個循環", "1");
-            
             if (action === "1") {
-                if (!course.exceptions) course.exceptions = [];
-                if (!course.exceptions.includes(dStr)) {
-                    course.exceptions.push(dStr);
-
-                    const idx = courses.findIndex(c => c.id.toString() === idStr);
-                    if (idx !== -1) courses[idx] = course;
-                    if (window.courses) {
-                        const wIdx = window.courses.findIndex(c => c.id.toString() === idStr);
-                        if (wIdx !== -1) window.courses[wIdx] = course;
-                    }
-
-                    if (typeof window.uploadEvent === 'function') {
-                        window.uploadEvent(course);
-                    }
-                    renderAll(); 
-                } else {
-                    alert("該日期已在刪除清單中");
-                }
+                deleteCourseOccurrence(course, dStr);
             } else if (action === "2") {
                 if (confirm(`⚠️ 警告：這將刪除所有週次的 [${course.name}]，確定嗎？`)) {
-                    if (typeof window.removeEventFromCloud === 'function') {
-                        window.removeEventFromCloud(idStr);
-                    }
-                    if (typeof window.courses !== 'undefined') {
-                        window.courses = window.courses.filter(c => c.id.toString() !== idStr);
-                    }
-                    courses = courses.filter(c => c.id.toString() !== idStr); 
-                    renderAll(); 
+                    deleteCourseDocument(course);
                 }
             }
         }
@@ -1156,13 +1220,6 @@ export function renderAll() {
                 studentHoursEl.innerText = (studentMonthData.totalMinutes / 60).toFixed(1);
             }
 
-            const paymentEl = document.getElementById('student-class-count');
-            if (paymentEl) {
-                const isPaid = currentUser.isPaid ?? false;
-                paymentEl.innerText = isPaid ? '已繳費' : '未繳費';
-                paymentEl.style.color = isPaid ? '#2e7d32' : '#d32f2f';
-            }
-
         } else {
             // 👨‍🏫 教練端：計算月度數據並渲染側邊欄
             if (typeof calculateMonthlyData === 'function') {
@@ -1324,6 +1381,22 @@ function getStudentCoursesOnDate(studentName, dStr) {
     return all.filter((c) => isWorkDayForStudent(studentName, c, dStr));
 }
 
+function findNextClassForStudentHome(studentName) {
+    const today = new Date();
+    for (let i = 0; i <= 60; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() + i);
+        const dStr = d.toLocaleDateString('en-CA');
+        const matches = getStudentCoursesOnDate(studentName, dStr);
+        if (matches.length > 0) {
+            return { dateStr: dStr, course: matches[0] };
+        }
+    }
+    return null;
+}
+
+window.findNextClassForStudentHome = findNextClassForStudentHome;
+
 window.changeStudentMonth = function (direction) {
     studentCalendarDate.setMonth(studentCalendarDate.getMonth() + direction);
     renderStudentMonthCalendar();
@@ -1381,3 +1454,5 @@ window.showStudentDayDetail = function (dStr) {
         </div>
     `).join('');
 };
+
+window.deleteFromModal = deleteFromModal;

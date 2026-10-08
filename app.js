@@ -274,6 +274,7 @@ onAuthStateChanged(auth, async (user) => {
             console.log("啟動學生模式，姓名比對用:", studentName || '(尚未找到對應姓名)');
             startStudentLiveSync(studentName);
             watchOverviewForStudent();
+            updateStudentPaymentStatus();
         }
 
         renderAll();
@@ -519,7 +520,7 @@ function watchOverviewForStudent() {
             if (slotsEl) {
                 const lines = (data.slotsLive || '').split('\n').map((s) => s.trim()).filter(Boolean);
                 if (lines.length === 0) {
-                    slotsEl.innerHTML = '<p class="no-data-hint">目前沒有公告時段</p>';
+                    slotsEl.innerHTML = '<p>目前沒有公告時段</p>';
                 } else {
                     slotsEl.innerHTML = lines.map((line) => `<div class="slot-chip">${line}</div>`).join('');
                 }
@@ -674,6 +675,7 @@ function startLiveSync() {
         // 🎨 渲染日曆 UI
         if (window.updateCalendarUI) {
             window.updateCalendarUI(myEvents);
+            renderStudentNextClassCard();
         }
         
         // 📊 同步更新左側 Sidebar 的統計數據與時數
@@ -683,6 +685,41 @@ function startLiveSync() {
             window.renderAll();
         }
     });
+}
+
+async function updateStudentPaymentStatus() {
+    if (!currentUser || currentUser.role !== 'student' || !currentUser.name) return;
+    const now = new Date();
+    try {
+        const statuses = await window.loadIncomePaidStatuses(now.getFullYear(), now.getMonth());
+        const isPaid = statuses[currentUser.name] === true;
+        const statusDisplay = document.getElementById('student-class-count');
+        if (statusDisplay) {
+            statusDisplay.innerText = isPaid ? '已繳費' : '未繳費';
+            statusDisplay.style.color = isPaid ? '#2e7d32' : '#d32f2f';
+        }
+    } catch (err) {
+        console.error('讀取學生繳費狀態失敗:', err);
+    }
+}
+
+function renderStudentNextClassCard() {
+    if (!currentUser || currentUser.role !== 'student' || !currentUser.name) return;
+    const el = document.getElementById('student-next-class');
+    if (!el) return;
+
+    const next = (typeof window.findNextClassForStudentHome === 'function')
+        ? window.findNextClassForStudentHome(currentUser.name)
+        : null;
+
+    if (!next) {
+        el.innerText = '尚無排定課程';
+        return;
+    }
+
+    const d = new Date(`${next.dateStr}T00:00:00`);
+    const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+    el.innerText = `${d.getMonth() + 1}/${d.getDate()} (${weekDays[d.getDay()]}) ${next.course.start}-${next.course.end}`;
 }
 
 // 同步student view的資料
@@ -764,15 +801,10 @@ window.loadIncomePaidStatuses = async function (
     year,
     month
 ) {
-    if (!currentUser.uid) {
-        console.warn('⚠️ 尚未登入，無法讀取收款紀錄');
-        return {};
-    }
 
     try {
         const q = query(
             collection(db, "incomeRecords"),
-            where("coachUid", "==", currentUser.uid),
             where("year", "==", year),
             where("month", "==", month + 1)
         );

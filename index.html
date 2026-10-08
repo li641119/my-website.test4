@@ -34,7 +34,7 @@
                         <button type="button" class="toggle-pw" data-target="password">顯示</button>
                     </div>
                     <!-- 記住我的帳號 -->
-                    <label style="display:flex; align-items:center; gap:6px; font-size:13px; color: var(--lc-ink-soft); margin-top:-4px; cursor:pointer;">
+                    <label style="display:flex; align-items:center; gap:6px; font-size:13px; color: var(--lc-ink-soft); cursor:pointer;">
                         <input type="checkbox" id="remember-email" style="width:auto; margin:0;">記住我的帳號
                     </label>
 
@@ -43,8 +43,8 @@
                     <a href="#" id="forgot-password-link" class="auth-footnote">忘記密碼？</a>
                 </form>
             
-            <!-- 註冊頁面 -->
-            <div id="login-error"></div>
+                <!-- 註冊頁面 -->
+                <div id="login-error"></div>
                 <form id="register-form" class="auth-form-hidden">
                     <span class="field-label">姓名</span>
                     <input type="text" id="register-name" placeholder="你的姓名" required>
@@ -100,15 +100,19 @@
                     </div>
 
                     <div class="overview-stats-row">
-                        <div class="overview-stat-block">
+                        <div class="overview-workhour">
                             <h3 class="panel-subtitle">工作時數</h3>
-                            <p>當週：<strong id="overview-week-hours">0</strong> 小時，當月：<strong id="overview-month-hours">0</strong> 小時</p>
+                            <div class="overview-stat-block">
+                                <p>當週：<strong id="overview-week-hours">0</strong> 小時，當月：<strong id="overview-month-hours">0</strong> 小時</p>
+                            </div>
                         </div>
-                        <div class="overview-stat-block">
+                        <div class="overview-income">
                             <h3 class="panel-subtitle">收入</h3>
-                            <p>當月收入：<strong id="overview-month-income" class="income-amount">0</strong> 元
-                                <button type="button" id="overview-income-toggle" class="toggle-income-btn">查看</button>
-                            </p>
+                            <div class="overview-stat-block">
+                                <p>當月收入：<strong id="overview-month-income" class="income-amount">0</strong> 元
+                                    <button type="button" id="overview-income-toggle" class="toggle-income-btn">查看</button>
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -122,7 +126,6 @@
                     <div id="monthly-stats">
                         <p class="no-data-hint">尚未有上課紀錄</p>
                     </div>
-                    <hr>
                     <button id="export-ics-btn" class="clear-btn secondary" onclick="exportScheduleToImage()"> 📤 匯出本週行事曆 (.png)</button>
                 </div>
                     <!--calendar-->
@@ -335,6 +338,12 @@
                 <input type="date" id="m-repeat-end">
             </div>
 
+            <div id="modal-delete-area" class="modal-delete-area hide">
+                <button type="button" id="btn-delete-single" class="btn-delete" onclick="deleteFromModal('single')">🗑️ 刪除這堂課</button>
+                <button type="button" id="btn-delete-this-week" class="btn-delete" onclick="deleteFromModal('thisWeek')">🗑️ 只刪本週</button>
+                <button type="button" id="btn-delete-all" class="btn-delete btn-delete-strong" onclick="deleteFromModal('all')">🗑️ 刪除整個循環</button>
+            </div>
+            
             <div class="modal-buttons">
                 <button type= "button" class="btn-save save-btn" onclick="saveFromModal()" >儲存行程</button>
                 <button type= "button" class="btn-cancel" onclick="closeModal()">取消</button>
@@ -354,31 +363,34 @@
         
         <div class="student-panel active" id="panel-student-home" data-panel-id="panel-student-home">
         <!-- 首頁 -->
+            <div class="student-header">
+                <h2> Welcome back!<span id="student-name-display">同學</span></h2>
+                <div class="student-stat-row">
+                    <div class="student-notice-card">
+                        <span>本月上課時數</span>
+                        <span class="stat-value" id="student-total-hours">0.0</span>
+                    </div>                
+
+                    <div class="student-stat-card">
+                        <span>繳費情形</span>
+                        <span class="stat-value" id="student-class-count">未繳費</span>
+                    </div>
+                    <div class="student-stat-card">
+                        <span>下次上課</span>
+                        <span class="stat-value" id="student-next-class" style="font-size:16px;">讀取中...</span>
+                    </div>
+                </div>
+            </div>
             <div class="student-notice-card">
                 <h3>📢 停課公告</h3>
-                <p id="student-notice-content">讀取中...</p>
+                <div id="student-notice-content">讀取中...</div>
             </div>
 
             <div class="student-slots-card">
                 <h3>🗓️ 下週可預約時段</h3>
                 <div id="student-slots-content">讀取中...</div>
             </div>
-                
-            <div class="student-header">
-                <!--需補上登入後顯示該生名字-->
-                <h2> Welcome back!<span id="student-name-display">同學</span></h2>
-                <div class="student-stats-row">
-                    <div class="student-stat-card">
-                        <span>本月上課時數</span>
-                        <span class="stat-value" id="student-total-hours">0.0</span>
-                    </div>
-                    <div class="student-stat-card">
-                        <span>繳費情形</span>
-                        <span class="stat-value" id="student-class-count">未繳費</span>
-                    </div>
-                </div>
-            </div>
-        </div>
+        </div>   
 
         <!-- 我的課程 -->   
         <div class="student-panel" id="panel-student-calendar" data-panel-id="panel-student-calendar">
