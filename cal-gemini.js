@@ -212,9 +212,10 @@ function openModal(isEdit = false, courseData = null, dateStr = null) {
         document.getElementById('m-repeat-end').value = '';
         if (submitBtn) submitBtn.innerText = "儲存行程";
         setupColorPalette(); 
-        toggleRepeatEndVisibility();
-        updateModalDeleteButtons(isEdit, courseData, dateStr);
     }
+
+    toggleRepeatEndVisibility();
+    updateModalDeleteButtons(isEdit, courseData, dateStr);
 }
 
 function createStudentList() {

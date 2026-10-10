@@ -343,7 +343,7 @@
                 <button type="button" id="btn-delete-this-week" class="btn-delete" onclick="deleteFromModal('thisWeek')">🗑️ 只刪本週</button>
                 <button type="button" id="btn-delete-all" class="btn-delete btn-delete-strong" onclick="deleteFromModal('all')">🗑️ 刪除整個循環</button>
             </div>
-            
+
             <div class="modal-buttons">
                 <button type= "button" class="btn-save save-btn" onclick="saveFromModal()" >儲存行程</button>
                 <button type= "button" class="btn-cancel" onclick="closeModal()">取消</button>
@@ -363,32 +363,36 @@
         
         <div class="student-panel active" id="panel-student-home" data-panel-id="panel-student-home">
         <!-- 首頁 -->
-            <div class="student-header">
-                <h2> Welcome back!<span id="student-name-display">同學</span></h2>
-                <div class="student-stat-row">
-                    <div class="student-notice-card">
-                        <span>本月上課時數</span>
-                        <span class="stat-value" id="student-total-hours">0.0</span>
-                    </div>                
+            <div class="panel-inner">
+                <div class="student-header">
+                    <h2> Welcome back!<span id="student-name-display">同學</span></h2>
+                        <div class="student-stat-row">
+                            <div class="student-notice-card">
+                                <span>本月上課時數</span>
+                                <span class="stat-value" id="student-total-hours">0.0</span>
+                            </div>                
 
-                    <div class="student-stat-card">
-                        <span>繳費情形</span>
-                        <span class="stat-value" id="student-class-count">未繳費</span>
-                    </div>
-                    <div class="student-stat-card">
-                        <span>下次上課</span>
-                        <span class="stat-value" id="student-next-class" style="font-size:16px;">讀取中...</span>
-                    </div>
+                            <div class="student-stat-card">
+                                <span>繳費情形</span>
+                                <span class="stat-value" id="student-class-count">未繳費</span>
+                            </div>
+
+                            <div class="student-stat-card">
+                                <span>下次上課</span>
+                                <span class="stat-value" id="student-next-class" style="font-size:16px;">讀取中...</span>
+                            </div>
+                        </div>
                 </div>
-            </div>
-            <div class="student-notice-card">
-                <h3>📢 停課公告</h3>
-                <div id="student-notice-content">讀取中...</div>
-            </div>
 
-            <div class="student-slots-card">
-                <h3>🗓️ 下週可預約時段</h3>
-                <div id="student-slots-content">讀取中...</div>
+                <div class="student-notice-card">
+                    <h3>📢 停課公告</h3>
+                    <div id="student-notice-content">讀取中...</div>
+                </div>
+
+                <div class="student-slots-card">
+                    <h3>🗓️ 下週可預約時段</h3>
+                    <div id="student-slots-content">讀取中...</div>
+                </div>
             </div>
         </div>   
 

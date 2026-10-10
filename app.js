@@ -750,6 +750,8 @@ function startStudentLiveSync(studentName) {
             window.updateCalendarUI(myEvents);
         }
 
+        renderStudentNextClassCard();
+
         if (typeof window.renderStudentMonthCalendar === 'function') {
             window.renderStudentMonthCalendar();
         }

@@ -294,11 +294,6 @@ body {
     display: block;
 }
 
-.coach-panel > .panel-inner {
-    width: 100%;
-    box-sizing: border-box;
-}
-
 /* 資訊總覽 */
 .overview-grid {
     display: flex;
@@ -357,6 +352,7 @@ body {
     gap: 20px;
     flex-wrap: wrap;
     flex-direction: row;
+    flex: 1;
 }
 
 .overview-workhour,
@@ -753,14 +749,14 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     display: flex;
     justify-content: flex-end;
     gap: 12px;
-    margin-top: 24px;
+    margin-top: 12px;
     width: 100%;
     box-sizing: border-box;
 }
 
 .modal-buttons button {
     flex: 1;
-    max-width: 120px;
+    width: 100%;
     padding: 10px 16px;
     font-size: 14px;
     font-weight: 600;
@@ -774,6 +770,12 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     background-color: #098579;
     color: white;
     box-shadow: 0 2px 4px rgba(9, 133, 121, 0.2);
+    min-height: 44px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
 }
 .modal-buttons .btn-save:hover {
     background-color: #076b61;
@@ -827,9 +829,9 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 
 /* 學生資訊 */ 
 .panel-inner {
-    padding: 24px;
+    padding: 12px;
     max-width: 1100px;
-    margin: 0 auto;
+    margin: 0 40px;
     width: 100%;
     box-sizing: border-box;
 }
@@ -1159,6 +1161,7 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 
 .student-stats-row {
     display: flex;
+    flex-direction: row;
     gap: 15px;
     margin-top: 15px;
 }
@@ -1171,6 +1174,7 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     flex: 1;
     display: flex;
     flex-direction: column;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
 
 .student-stat-card .label { font-size: 13px; color: #546e7a; margin-bottom: 5px; }
@@ -1521,10 +1525,10 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 
 
 .panel-subtitle {
-    font-size: 15px;
+    font-size: 18px;
     font-weight: 700;
     color: #2c3e50;
-    margin: 20px 0 12px;
+    margin: 12px 0 0;
 }
 
 
@@ -1569,11 +1573,9 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 /* 彈窗裡的刪除區 */
 .modal-delete-area {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     gap: 8px;
-    margin-top: 20px;
     padding-top: 16px;
-    border-top: 1px dashed #e0e0e0;
 }
 
 .btn-delete {
@@ -1583,7 +1585,7 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     border: 1px solid #ffcdd2;
     border-radius: 8px;
     background: #ffebee;
-    color: #c62828;
+    color: #cd4444;
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
@@ -1593,9 +1595,9 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 .btn-delete:hover { background: #ffdde0; }
 
 .btn-delete-strong {
-    background: #c62828;
+    background: #dc4e4e;
     color: #fff;
-    border-color: #c62828;
+    border-color: #dc4e4e;
 }
 
 .btn-delete-strong:hover { background: #a82020; }
