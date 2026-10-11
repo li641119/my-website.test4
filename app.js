@@ -294,6 +294,112 @@ onAuthStateChanged(auth, async (user) => {
 
 // 學生資料
 // ------------------------------------------------------------
+// ------------------------------------------------------------
+// 學生個人頁：基本資料 + 日期區間的逐堂上課明細
+// ------------------------------------------------------------
+let currentProfileStudent = null;
+
+function escapeProfileText(text) {
+    return String(text ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+}
+
+function openStudentProfile(name, data) {
+    currentProfileStudent = name;
+
+    document.getElementById('student-list-view').classList.add('hide');
+    document.getElementById('student-profile-view').classList.remove('hide');
+
+    document.getElementById('profile-name').innerText = name;
+    document.getElementById('profile-email').innerText = data.email || '（尚未註冊帳號）';
+    document.getElementById('profile-price').innerText =
+        data.defaultPrice !== undefined ? `$${data.defaultPrice}` : '—';
+
+    // 預設查詢區間：本月 1 號到月底
+    const now = new Date();
+    document.getElementById('profile-start').value =
+        new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString('en-CA');
+    document.getElementById('profile-end').value =
+        new Date(now.getFullYear(), now.getMonth() + 1, 0).toLocaleDateString('en-CA');
+
+    renderStudentProfileDetails();
+}
+
+window.closeStudentProfile = function () {
+    currentProfileStudent = null;
+    const listView = document.getElementById('student-list-view');
+    const profileView = document.getElementById('student-profile-view');
+    if (listView) listView.classList.remove('hide');
+    if (profileView) profileView.classList.add('hide');
+};
+
+// 刪除成功後 deleteStudent 會呼叫 renderStudentDbPanel，裡面已經會回到名單；
+// 按取消則會留在個人頁。
+window.deleteStudentFromProfile = function () {
+    if (currentProfileStudent) deleteStudent(currentProfileStudent);
+};
+
+window.renderStudentProfileDetails = function () {
+    if (!currentProfileStudent) return;
+
+    const startVal = document.getElementById('profile-start').value;
+    const endVal = document.getElementById('profile-end').value;
+    const summaryEl = document.getElementById('profile-summary');
+    const listEl = document.getElementById('profile-detail-list');
+
+    listEl.innerHTML = '';
+
+    if (!startVal || !endVal) {
+        summaryEl.innerText = '請選擇開始與結束日期';
+        return;
+    }
+    if (startVal > endVal) {
+        summaryEl.innerText = '開始日期不能晚於結束日期';
+        return;
+    }
+    if (typeof window.getStudentLessonDetails !== 'function') {
+        summaryEl.innerText = '資料尚未載入完成，請稍後再試';
+        return;
+    }
+
+    const lessons = window.getStudentLessonDetails(currentProfileStudent, startVal, endVal);
+    if (lessons.length === 0) {
+        summaryEl.innerText = '這段期間沒有上課紀錄';
+        return;
+    }
+
+    // 統計只算已上完的課
+    const done = lessons.filter(l => l.completed);
+    const upcomingCount = lessons.length - done.length;
+    const totalMinutes = done.reduce((sum, l) => sum + l.minutes, 0);
+    const totalMoney = done.reduce((sum, l) => sum + l.money, 0);
+
+    let summary = `已上完 <strong>${done.length}</strong> 堂（${Number((totalMinutes / 60).toFixed(2))} 小時），總金額 <strong>$${Math.round(totalMoney).toLocaleString()}</strong>`;
+    if (upcomingCount > 0) {
+        summary += `　另有 ${upcomingCount} 堂尚未上課，不列入統計`;
+    }
+    summaryEl.innerHTML = summary;
+
+    const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+    const spansYears = startVal.slice(0, 4) !== endVal.slice(0, 4);
+
+    listEl.innerHTML = lessons.map(l => {
+        const d = new Date(`${l.dateStr}T00:00:00`);
+        const md = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+        const dateLabel = `${spansYears ? d.getFullYear() + '/' : ''}${md} (${weekDays[d.getDay()]})`;
+        const hours = Number((l.minutes / 60).toFixed(2));
+
+        return `
+            <div class="lesson-item ${l.completed ? '' : 'is-upcoming'}">
+                <span class="lesson-date">${dateLabel}</span>
+                <span class="lesson-time">${escapeProfileText(l.start)}-${escapeProfileText(l.end)}（${hours} 小時）</span>
+                <span class="lesson-loc">📍 ${escapeProfileText(l.loc)}</span>
+                <span class="lesson-money">$${Math.round(l.money).toLocaleString()}</span>
+                ${l.completed ? '' : '<span class="lesson-tag">未上</span>'}
+            </div>`;
+    }).join('');
+};
 
 // 取得學生資料
 async function renderStudentDbPanel() {
@@ -301,6 +407,7 @@ async function renderStudentDbPanel() {
     const template = document.getElementById('student-row-template');
 
     if (!listEl || !template) return;
+    closeStudentProfile();
     
 
     listEl.innerHTML = '<p class="no-data-hint">讀取中...</p>';
@@ -339,7 +446,7 @@ async function renderStudentDbPanel() {
 
             // 點擊學生列 → 展開 / 收合詳細資料
             rowClickable.addEventListener('click', () => {
-                detail.classList.toggle('hide');
+                openStudentProfile(name, data);
             });
 
 
@@ -491,6 +598,9 @@ function renderOverviewStats() {
 window.renderOverviewPanel = function () {
     loadOverviewEditor();
     renderOverviewStats();
+    if (typeof window.renderTodaySchedule === 'function') {
+        window.renderTodaySchedule();
+    }
 };
 
 // 收入數字的模糊/顯示切換（跟側邊欄那個是同一套邏輯，另外獨立一份給總覽頁用）
@@ -719,8 +829,10 @@ function renderStudentNextClassCard() {
 
     const d = new Date(`${next.dateStr}T00:00:00`);
     const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
-    el.innerText = `${d.getMonth() + 1}/${d.getDate()} (${weekDays[d.getDay()]}) ${next.course.start}-${next.course.end}`;
+    const loc = next.course.loc ? ` @ ${next.course.loc}` : '';
+    el.innerText = `${d.getMonth() + 1}/${d.getDate()} (${weekDays[d.getDay()]}) ${next.course.start} - ${next.course.end}${loc}`;
 }
+
 
 // 同步student view的資料
 function startStudentLiveSync(studentName) {
@@ -754,6 +866,9 @@ function startStudentLiveSync(studentName) {
 
         if (typeof window.renderStudentMonthCalendar === 'function') {
             window.renderStudentMonthCalendar();
+        }
+        if (typeof window.renderProgressChart === 'function') {
+            window.renderProgressChart();
         }
     });
 }
@@ -954,6 +1069,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (targetPanelId === 'panel-student-calendar' && typeof window.renderStudentMonthCalendar === 'function') {
                 window.renderStudentMonthCalendar();
+            }
+            if (targetPanelId === 'panel-student-history' && typeof window.renderProgressChart === 'function') {
+                window.renderProgressChart();
             }
         });
     });

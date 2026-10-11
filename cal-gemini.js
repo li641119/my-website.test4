@@ -1240,6 +1240,9 @@ export function renderAll() {
                 }
             }
         }
+        if (!isStudent) {
+            renderTodaySchedule();
+        }
     } catch (error) {
         console.error("❌ renderAll 執行失敗:", error);
     }
@@ -1362,19 +1365,7 @@ let studentCalendarDate = new Date();
 
 function isWorkDayForStudent(studentName, course, dStr) {
     if (!course || course.type !== 'work' || course.name !== studentName) return false;
-
-    if (course.isRepeating) {
-        const targetDay = (course.day === "8" ? 0 : parseInt(course.day, 10) - 1);
-        const d = new Date(`${dStr}T00:00:00`);
-        if (d.getDay() !== targetDay) return false;
-
-        const exceptions = course.exceptions || [];
-        if (exceptions.includes(dStr)) return false;
-
-        return isDateWithinRepeatRange(course, dStr);
-    } else {
-        return course.date === dStr;
-    }
+    return courseOccursOnDate(course, dStr);
 }
 
 function getStudentCoursesOnDate(studentName, dStr) {
@@ -1456,4 +1447,214 @@ window.showStudentDayDetail = function (dStr) {
     `).join('');
 };
 
+// ------------------------------------------------------------
+// 共用規則：某一堂課在指定日期（YYYY-MM-DD）有沒有上課。
+// 單次課程看日期；重複課程看星期幾、請假例外、開始日與「重複到」結束日。
+// 學生月曆、今日行程都呼叫這一個函式，規則只存在一處。
+// ------------------------------------------------------------
+function courseOccursOnDate(course, dStr) {
+    if (!course) return false;
+
+    if (course.isRepeating) {
+        if (!course.day) return false;
+        const targetDay = (course.day === "8" ? 0 : parseInt(course.day, 10) - 1);
+        const d = new Date(`${dStr}T00:00:00`);
+        if (d.getDay() !== targetDay) return false;
+        if ((course.exceptions || []).includes(dStr)) return false;
+        return isDateWithinRepeatRange(course, dStr);
+    }
+
+    return course.date === dStr;
+}
+
+// 教練總覽：今日行程（只列教球課，依開始時間排序，用今天的實際日期）
+function renderTodaySchedule() {
+    const listEl = document.getElementById('overview-today-list');
+    if (!listEl) return;
+
+    const now = new Date();
+    const todayStr = now.toLocaleDateString('en-CA');
+
+    const dateLabelEl = document.getElementById('overview-today-date');
+    if (dateLabelEl) {
+        const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+        dateLabelEl.innerText = `${now.getMonth() + 1}/${now.getDate()} (${weekDays[now.getDay()]})`;
+    }
+
+    const todays = (window.courses || courses || [])
+        .filter(c => c && c.type === 'work' && courseOccursOnDate(c, todayStr))
+        .sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+
+    if (todays.length === 0) {
+        listEl.innerHTML = '<p class="no-data-hint">今天沒有行程</p>';
+        return;
+    }
+
+    listEl.innerHTML = todays.map(c => `
+        <div class="today-item">
+            <span class="today-time">${c.start} - ${c.end}</span>
+            <span class="today-name">${c.name}</span>
+            <span class="today-loc">@ ${c.loc}</span>
+        </div>
+    `).join('');
+}
+window.renderTodaySchedule = renderTodaySchedule;
+
 window.deleteFromModal = deleteFromModal;
+
+// 取得某位學生在日期區間內的教球課明細（由舊到新）。
+// 是否上課沿用共用規則 courseOccursOnDate，時長與費率的算法跟「本月收入」一致。
+function getStudentLessonDetails(studentName, startStr, endStr) {
+    const studentCourses = (window.courses || courses || [])
+        .filter(c => c && c.type === 'work' && c.name === studentName);
+
+    const now = new Date();
+    const todayStr = now.toLocaleDateString('en-CA');
+    const nowTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const results = [];
+    const cursor = new Date(`${startStr}T00:00:00`);
+    const last = new Date(`${endStr}T00:00:00`);
+
+    while (cursor <= last) {
+        const dStr = cursor.toLocaleDateString('en-CA');
+        studentCourses.forEach(c => {
+            if (!courseOccursOnDate(c, dStr)) return;
+            const minutes = getCourseDurationMinutes(c);
+            const rate = Number.isFinite(Number(c.price)) ? Number(c.price) : 600;
+            results.push({
+                dateStr: dStr,
+                start: c.start,
+                end: c.end,
+                loc: c.loc,
+                minutes,
+                money: (minutes / 60) * rate,
+                completed: dStr < todayStr || (dStr === todayStr && (c.end || '') <= nowTime)
+            });
+        });
+        cursor.setDate(cursor.getDate() + 1);
+    }
+
+    results.sort((a, b) =>
+        a.dateStr.localeCompare(b.dateStr) || (a.start || '').localeCompare(b.start || '')
+    );
+    return results;
+}
+window.getStudentLessonDetails = getStudentLessonDetails;
+
+// ------------------------------------------------------------
+// 學生端：學習歷程折線圖（橫軸月份、縱軸該月已上完的上課小時數）
+// 時數沿用 getStudentLessonDetails，跟月曆、教練端個人頁是同一套規則；
+// 只算已上完的課，所以當年度只會畫到目前這個月。
+// ------------------------------------------------------------
+let chartYear = new Date().getFullYear();
+
+function getEarliestLessonYear(studentName) {
+    const years = (window.courses || courses || [])
+        .filter(c => c && c.type === 'work' && c.name === studentName && c.date)
+        .map(c => parseInt(c.date.slice(0, 4), 10))
+        .filter(y => Number.isFinite(y));
+    return years.length ? Math.min(...years) : new Date().getFullYear();
+}
+
+function getMonthlyHoursForYear(studentName, year) {
+    const hours = new Array(12).fill(0);
+    const lessons = getStudentLessonDetails(studentName, `${year}-01-01`, `${year}-12-31`);
+    lessons.forEach(l => {
+        if (!l.completed) return;
+        const monthIdx = parseInt(l.dateStr.slice(5, 7), 10) - 1;
+        hours[monthIdx] += l.minutes / 60;
+    });
+    return hours;
+}
+
+// 依資料決定縱軸最大值與刻度間距
+function niceChartScale(maxVal) {
+    if (maxVal <= 4) return { step: 1, max: 4 };
+    const rough = maxVal / 4;
+    const steps = [1, 2, 5, 10, 20, 50, 100, 200, 500];
+    const step = steps.find(s => s >= rough) || 1000;
+    return { step, max: Math.ceil(maxVal / step) * step };
+}
+
+function renderProgressChart() {
+    const container = document.getElementById('progress-chart');
+    if (!container) return;
+    if (!currentUser || currentUser.role !== 'student' || !currentUser.name) return;
+
+    const name = currentUser.name;
+    const now = new Date();
+    const nowYear = now.getFullYear();
+    const earliest = Math.min(getEarliestLessonYear(name), nowYear);
+
+    // 年份只能在「最早有課的那年」到「今年」之間切換
+    if (chartYear > nowYear) chartYear = nowYear;
+    if (chartYear < earliest) chartYear = earliest;
+
+    const labelEl = document.getElementById('chart-year-label');
+    if (labelEl) labelEl.innerText = `${chartYear} 年`;
+    const prevBtn = document.getElementById('chart-year-prev');
+    const nextBtn = document.getElementById('chart-year-next');
+    if (prevBtn) prevBtn.disabled = chartYear <= earliest;
+    if (nextBtn) nextBtn.disabled = chartYear >= nowYear;
+
+    // 今年只畫到目前這個月，之後的月份還沒有已上完的課，不畫點
+    const lastIdx = chartYear === nowYear ? now.getMonth() : 11;
+    const plotted = getMonthlyHoursForYear(name, chartYear).slice(0, lastIdx + 1);
+    const total = plotted.reduce((sum, h) => sum + h, 0);
+    const hasData = plotted.some(h => h > 0);
+
+    const totalEl = document.getElementById('chart-year-total');
+    if (totalEl) {
+        const totalText = Number(total.toFixed(1));
+        totalEl.innerText = chartYear === nowYear
+            ? `今年累計 ${totalText} 小時`
+            : `全年共 ${totalText} 小時`;
+    }
+
+    const W = 480, H = 250, L = 38, R = 12, T = 28, B = 34, PAD = 14;
+    const plotW = W - L - R;
+    const plotH = H - T - B;
+    const xStep = (plotW - PAD * 2) / 11;
+    const xAt = i => L + PAD + i * xStep;
+    const { step, max } = niceChartScale(Math.max(...plotted, 0));
+    const yAt = v => T + plotH - (v / max) * plotH;
+
+    let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${chartYear} 年每月上課時數折線圖">`;
+
+    // 水平格線與縱軸刻度
+    for (let v = 0; v <= max; v += step) {
+        const y = yAt(v);
+        svg += `<line x1="${L}" y1="${y}" x2="${L + plotW}" y2="${y}" stroke="${v === 0 ? '#b0bec5' : '#eceff1'}" stroke-width="1"/>`;
+        svg += `<text x="${L - 8}" y="${y + 4}" text-anchor="end" font-size="12" fill="#7f8c8d">${v}</text>`;
+    }
+
+    // 軸單位與橫軸月份
+    svg += `<text x="4" y="14" font-size="12" fill="#7f8c8d">小時</text>`;
+    svg += `<text x="${W - 4}" y="${T + plotH + 22}" text-anchor="end" font-size="12" fill="#7f8c8d">月</text>`;
+    for (let i = 0; i < 12; i++) {
+        svg += `<text x="${xAt(i)}" y="${T + plotH + 22}" text-anchor="middle" font-size="12" fill="#7f8c8d">${i + 1}</text>`;
+    }
+
+    if (hasData) {
+        const pts = plotted.map((h, i) => `${xAt(i).toFixed(1)},${yAt(h).toFixed(1)}`).join(' ');
+        svg += `<polyline points="${pts}" fill="none" stroke="#4db6ac" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
+        plotted.forEach((h, i) => {
+            const x = xAt(i).toFixed(1);
+            const y = yAt(h);
+            svg += `<circle cx="${x}" cy="${y.toFixed(1)}" r="4.5" fill="#fff" stroke="#4db6ac" stroke-width="2.5"/>`;
+            svg += `<text x="${x}" y="${(y - 10).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="700" fill="#2c3e50">${Number(h.toFixed(1))}</text>`;
+        });
+    } else {
+        svg += `<text x="${L + plotW / 2}" y="${T + plotH / 2}" text-anchor="middle" font-size="14" fill="#95a5a6">這一年沒有上課紀錄</text>`;
+    }
+
+    svg += `</svg>`;
+    container.innerHTML = svg;
+}
+
+window.changeChartYear = function (direction) {
+    chartYear += direction;
+    renderProgressChart();
+};
+window.renderProgressChart = renderProgressChart;
