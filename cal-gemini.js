@@ -898,10 +898,10 @@ export async function renderIncomePanel() {
                 <label class="income-paid-checkbox">
                     <input type="checkbox" ${isPaid ? 'checked' : ''}
                         onchange="toggleIncomePaid('${safeName}', this.checked)">
-                    <span>已收款</span>
+                    <span>已收款</span><span class="db-name">${name}</span>
+                    <span class="db-meta">${(data.mins / 60).toFixed(1)} 小時 · $${money.toLocaleString()}</span>
                 </label>
-                <span class="db-name">${name}</span>
-                <span class="db-meta">${(data.mins / 60).toFixed(1)} 小時 · $${money.toLocaleString()}</span>
+                
                 ${reportTag}
             </div>`;
     }).join('');
@@ -1209,14 +1209,7 @@ export function renderAll() {
 
         // 3. 數據統計與 UI 介面更新
         if (isStudent) {
-            // 🎓 學生端：直接使用統一的 calculateMonthlyData 計算，確保數字 100% 一致
-            const studentMonthData = calculateMonthlyData(currentYear, currentMonth);
-
-            const studentHoursEl = document.getElementById('student-total-hours');
-            if (studentHoursEl) {
-                studentHoursEl.innerText = (studentMonthData.totalMinutes / 60).toFixed(1);
-            }
-
+            renderStudentHomeSummary();
         } else {
             // 👨‍🏫 教練端：計算月度數據並渲染側邊欄
             if (typeof calculateMonthlyData === 'function') {
@@ -1437,8 +1430,11 @@ window.showStudentDayDetail = function (dStr) {
 
     detailEl.innerHTML = matches.map((c) => `
         <div class="db-row">
-            <span class="db-name">${dStr}</span>
-            <span class="db-meta">⏰ ${c.start}-${c.end} · 📍 ${c.loc}</span>
+            <div class="db-main">
+                <span class="db-name">${dStr}</span>
+                <span class="db-time">⏰ ${c.start}-${c.end}</span>
+            </div>
+            <span class="db-meta">📍 ${c.loc}</span>
         </div>
     `).join('');
 };
@@ -1604,8 +1600,8 @@ function renderProgressChart() {
     if (totalEl) {
         const totalText = Number(total.toFixed(1));
         totalEl.innerText = chartYear === nowYear
-            ? `今年累計 ${totalText} 小時`
-            : `全年共 ${totalText} 小時`;
+            ? `今年已上完累計 ${totalText} 小時`
+            : `全年已上完共 ${totalText} 小時`;
     }
 
     const W = 480, H = 250, L = 38, R = 12, T = 28, B = 34, PAD = 14;
@@ -1654,3 +1650,57 @@ window.changeChartYear = function (direction) {
     renderProgressChart();
 };
 window.renderProgressChart = renderProgressChart;
+
+// ------------------------------------------------------------
+// 學生端統一數字來源：同一份明細同時算出「已上完」和「預定」兩組數字。
+//   已上完：日期在今天以前，或今天且下課時間已過
+//   預定　：區間內所有排進行事曆的課（包含已上完的）
+// 首頁、繳費頁、上課紀錄查詢都從這裡取值，不再各算各的。
+// ------------------------------------------------------------
+function formatHours(minutes) {
+    return Number((minutes / 60).toFixed(2));
+}
+window.formatHours = formatHours;
+
+function getStudentPeriodSummary(studentName, startStr, endStr) {
+    const lessons = getStudentLessonDetails(studentName, startStr, endStr);
+    const blank = () => ({ count: 0, minutes: 0, money: 0 });
+    const completed = blank();
+    const scheduled = blank();
+
+    lessons.forEach(l => {
+        scheduled.count += 1;
+        scheduled.minutes += l.minutes;
+        scheduled.money += l.money;
+        if (l.completed) {
+            completed.count += 1;
+            completed.minutes += l.minutes;
+            completed.money += l.money;
+        }
+    });
+    return { completed, scheduled };
+}
+
+function getStudentMonthSummary(studentName, year, monthIdx) {
+    const mm = String(monthIdx + 1).padStart(2, '0');
+    const lastDay = new Date(year, monthIdx + 1, 0).getDate();
+    return getStudentPeriodSummary(
+        studentName,
+        `${year}-${mm}-01`,
+        `${year}-${mm}-${String(lastDay).padStart(2, '0')}`
+    );
+}
+
+window.getStudentPeriodSummary = getStudentPeriodSummary;
+window.getStudentMonthSummary = getStudentMonthSummary;
+
+// 學生首頁「本月上課時數」：大字是已上完，小字是本月預定（以今天所在的月份為準）
+function renderStudentHomeSummary() {
+    if (!currentUser || currentUser.role !== 'student' || !currentUser.name) return;
+    const now = new Date();
+    const s = getStudentMonthSummary(currentUser.name, now.getFullYear(), now.getMonth());
+    const hoursEl = document.getElementById('student-total-hours');
+    const subEl = document.getElementById('student-total-hours-sub');
+    if (hoursEl) hoursEl.innerText = `${formatHours(s.completed.minutes)} 小時`;
+    if (subEl) subEl.innerText = `本月預定 ${formatHours(s.scheduled.minutes)} 小時`;
+}

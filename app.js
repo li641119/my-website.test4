@@ -430,7 +430,7 @@ async function renderStudentDbPanel() {
 
             if (!data.email && !data.isStudent) return;
 
-            const emailText = data.email ? data.email : '（尚未註冊帳號）';
+            const emailText = data.email ? data.email : '尚未註冊帳號';
             const priceText = data.defaultPrice !== undefined ? `$${data.defaultPrice}` : '—';
             const row = template.content.cloneNode(true);
 
@@ -896,7 +896,7 @@ window.setIncomePaidStatus = async function (year, month, studentName, isPaid) {
         );
 
         await syncReportStatusWithPaid(year, month, studentName, isPaid);
-        
+
         return true;
 
     } catch (error) {
@@ -1078,64 +1078,35 @@ document.addEventListener('DOMContentLoaded', () => {
 window.queryMyHistory = function () {
     if (!currentUser || !currentUser.name) return;
 
-    const startInput = document.getElementById('student-history-start');
-    const endInput = document.getElementById('student-history-end');
+    const startVal = document.getElementById('student-history-start').value;
+    const endVal = document.getElementById('student-history-end').value;
     const resultEl = document.getElementById('student-history-result');
-    if (!startInput.value || !endInput.value) {
+
+    if (!startVal || !endVal) {
         resultEl.innerText = '請選擇開始與結束日期';
         return;
     }
-
-    const startDate = new Date(`${startInput.value}T00:00:00`);
-    const endDate = new Date(`${endInput.value}T00:00:00`);
-    if (startDate > endDate) {
+    if (startVal > endVal) {
         resultEl.innerText = '開始日期不能晚於結束日期';
         return;
     }
-
-    const allCourses = window.courses || [];
-    const myCourses = allCourses.filter((c) => c && c.type === 'work' && c.name === currentUser.name);
-
-    let count = 0;
-    let totalMinutes = 0;
-    let totalMoney = 0;
-
-    myCourses.forEach((course) => {
-        const hourlyRate = course.price !== undefined ? Number(course.price) : 600;
-        const duration = Number(course.duration || 0);
-
-        if (course.isRepeating) {
-            const targetDay = (course.day === "8" ? 0 : parseInt(course.day) - 1);
-            const exceptions = course.exceptions || [];
-            let cursor = new Date(startDate);
-            while (cursor <= endDate) {
-                if (cursor.getDay() === targetDay) {
-                    const dStr = cursor.toLocaleDateString('en-CA');
-                    if (!exceptions.includes(dStr)) {
-                        count++;
-                        totalMinutes += duration;
-                        totalMoney += (duration / 60) * hourlyRate;
-                    }
-                }
-                cursor.setDate(cursor.getDate() + 1);
-            }
-        } else {
-            if (!course.date) return;
-            const courseDate = new Date(`${course.date}T00:00:00`);
-            if (courseDate >= startDate && courseDate <= endDate) {
-                count++;
-                totalMinutes += duration;
-                totalMoney += (duration / 60) * hourlyRate;
-            }
-        }
-    });
-
-    if (count === 0) {
-        resultEl.innerHTML = '這段期間查無上課紀錄';
+    if (typeof window.getStudentPeriodSummary !== 'function') {
+        resultEl.innerText = '資料尚未載入完成，請稍後再試';
         return;
     }
 
-    resultEl.innerHTML = `共 <strong>${count}</strong> 堂課（${(totalMinutes / 60).toFixed(1)} 小時），總金額 <strong>$${Math.round(totalMoney).toLocaleString()}</strong>`;
+    const s = window.getStudentPeriodSummary(currentUser.name, startVal, endVal);
+    if (s.scheduled.count === 0) {
+        resultEl.innerText = '這段期間查無上課紀錄';
+        return;
+    }
+
+    const fmt = (b) =>
+        `<strong>${b.count}</strong> 堂（${window.formatHours(b.minutes)} 小時），$${Math.round(b.money).toLocaleString()}`;
+
+    resultEl.innerHTML = `
+        <div class="history-result-row"><span class="history-tag history-tag-done">已上完</span>${fmt(s.completed)}</div>
+        <div class="history-result-row"><span class="history-tag history-tag-sched">預定（含已上完）</span>${fmt(s.scheduled)}</div>`;
 };
 
 window.renderCoachOverview = function () {
@@ -1408,9 +1379,19 @@ function payFormatTime(iso) {
 window.payFormatTime = payFormatTime;
 
 function payComputeAmount(year, monthIdx) {
-    if (typeof window.calculateMonthlyData !== 'function') return { amount: 0, minutes: 0 };
-    const d = window.calculateMonthlyData(year, monthIdx);
-    return { amount: Math.round(d.totalIncome), minutes: d.totalMinutes };
+    const empty = { amount: 0, minutes: 0, completedAmount: 0, pendingAmount: 0 };
+    if (!currentUser || !currentUser.name || typeof window.getStudentMonthSummary !== 'function') {
+        return empty;
+    }
+    const s = window.getStudentMonthSummary(currentUser.name, year, monthIdx);
+    const amount = Math.round(s.scheduled.money);
+    const completedAmount = Math.round(s.completed.money);
+    return {
+        amount,
+        minutes: s.scheduled.minutes,
+        completedAmount,
+        pendingAmount: Math.max(0, amount - completedAmount)
+    };
 }
 
 async function payCopyToClipboard(text) {
@@ -1669,19 +1650,25 @@ function refreshStudentPaymentViews() {
 function updateHomePaymentCard() {
     const el = document.getElementById('student-class-count');
     if (!el) return;
+    const subEl = document.getElementById('student-class-count-sub');
     const set = (text, color) => { el.innerText = text; el.style.color = color; };
 
     const now = new Date();
-    const key = payMonthKey(now.getFullYear(), now.getMonth());
+    const year = now.getFullYear();
+    const monthIdx = now.getMonth();
+    const key = payMonthKey(year, monthIdx);
     const report = payStudentReports[key];
+    const { amount, completedAmount } = payComputeAmount(year, monthIdx);
+
+    if (subEl) {
+        subEl.innerText = amount > 0
+            ? `本月預定 $${amount.toLocaleString()}（已上完 $${completedAmount.toLocaleString()}）`
+            : '';
+    }
 
     if (payStudentPaidMonths[key] === true) { set('已繳費', '#2e7d32'); return; }
     if (report && report.status === 'reported') { set('已回報，待確認', '#e67e22'); return; }
-    if (Array.isArray(window.courses) &&
-        payComputeAmount(now.getFullYear(), now.getMonth()).amount <= 0) {
-        set('本月無費用', '#7f8c8d');
-        return;
-    }
+    if (Array.isArray(window.courses) && amount <= 0) { set('本月無費用', '#7f8c8d'); return; }
     set('未繳費', '#d32f2f');
 }
 
@@ -1796,13 +1783,21 @@ function renderStudentPayPanel() {
     if (prevBtn) prevBtn.disabled = curNum <= minNum;
     if (nextBtn) nextBtn.disabled = curNum >= maxNum;
 
-    const { amount, minutes } = payComputeAmount(payYear, payMonthIdx);
-    payCurrentAmount = amount;
+    const { amount, minutes, completedAmount, pendingAmount } = payComputeAmount(payYear, payMonthIdx);
+payCurrentAmount = amount;
 
     const amountEl = document.getElementById('pay-amount');
     const hoursEl = document.getElementById('pay-hours');
+    const breakdownEl = document.getElementById('pay-breakdown');
     if (amountEl) amountEl.innerText = `$${amount.toLocaleString()}`;
-    if (hoursEl) hoursEl.innerText = `共 ${Number((minutes / 60).toFixed(2))} 小時`;
+    if (hoursEl) hoursEl.innerText = `預定 ${Number((minutes / 60).toFixed(2))} 小時`;
+    if (breakdownEl) {
+        breakdownEl.innerText = amount <= 0
+            ? ''
+            : (pendingAmount > 0
+                ? `其中已上完 $${completedAmount.toLocaleString()}、尚未上 $${pendingAmount.toLocaleString()}`
+                : '這個月的課程全部已上完');
+}
 
     const methodEl = document.getElementById('pay-method-area');
     const reportEl = document.getElementById('pay-report-area');

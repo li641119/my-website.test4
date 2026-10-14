@@ -96,16 +96,17 @@
                         <div class="overview-workhour">
                             <h3 class="panel-subtitle">工作時數</h3>
                             <div class="overview-stat-block">
-                                <p>當週：<strong id="overview-week-hours"  class="hour-amount">0</strong> 小時，當月：<strong id="overview-month-hours"  class="hour-amount">0</strong></p>
+                                <div>本週預定時數：<strong id="overview-week-hours"  class="hour-amount">0</strong> 小時</div>
+                                <div>本月預定時數：<strong id="overview-month-hours"  class="hour-amount">0</strong>小時</div>
                             </div>
                         </div>
                         
                         <div class="overview-income">
                             <h3 class="panel-subtitle">收入</h3>
                             <div class="overview-stat-block">
-                                <p>當月收入：<strong id="overview-month-income" class="income-amount">0</strong>  元
+                                <div>本月預定收入：<strong id="overview-month-income" class="income-amount">0</strong>  元
                                     <button type="button" id="overview-income-toggle" class="toggle-income-btn">查看</button>
-                                </p>
+                                </div>
                             </div>
                         </div>
 
@@ -438,14 +439,20 @@
             <div class="panel-subtitle"> Welcome back!<span id="student-name-display">同學</span></div>
                 <div class="student-header">
                     <div class="student-lesson">
-                        <div class="student-lesson-card">
-                            <span>本月上課時數</span>
-                            <span class="stat-value" id="student-total-hours">0.0</span>
+                        <div class="student-stat-card">
+                            <span>本月上課時數(已完成)</span>
+                            <div class="student-stat-arrange">
+                                <span class="stat-value" id="student-total-hours">0 小時</span>
+                                <span class="stat-sub" id="student-total-hours-sub"></span>                   
+                            </div>
                         </div>
 
-                        <div class="student-lesson-card">
-                            <span>本月上課金額</span>
-                            <span class="stat-value" id="student-total-hours">NT$ 0.0</span>
+                        <div class="student-stat-card">
+                            <span>本月上課費用</span>
+                            <div class="student-stat-arrange">
+                                <span class="stat-value" id="student-class-count">未繳費</span>
+                                <span class="stat-sub" id="student-class-count-sub"></span>
+                            </div>
                         </div>
                             
                     </div>   
@@ -453,11 +460,11 @@
                     <h3 style="margin: 16px 0; font-size: 16px; line-height: 1.5; color: #586773;">💰 課程與費用</h3>
 
                     <div class="student-pay-card">
-                        <span>繳費情形</span>
+                        <span>本月繳費情形</span>
                         <span class="stat-value" id="student-class-count" style="font-size:16px;">未繳費</span>
                     </div>
 
-                    <div class="student-stat-card">
+                    <div class="student-next-card">
                         <span>下次上課</span>
                         <span class="stat-value" id="student-next-class" style="font-size:16px;">讀取中...</span>
                     </div>
@@ -487,13 +494,15 @@
                         <h3 id="student-month-label">讀取中...</h3>
                         <button type="button" onclick="changeStudentMonth(1)">➡️</button>
                     </div>
-                            
+                    
                     <div class="month-calendar-grid" id="student-month-grid"></div>
                 </div>
             
                 <!-- 右側：課程詳細資訊 -->
                 <div class="month-day-detail" id="student-day-detail">
-                    <p class="no-data-hint">點選上面有標色的日期查看上課細節</p>
+                    <div class="no-data-hint">點選上面有標色的日期查看上課細節</div>
+                    <div class="no-data-hint">灰色=已完成課程，藍綠色=未完成課程</div>
+
                 </div>
 
             </div>
@@ -502,7 +511,7 @@
         <!-- 上課紀錄 -->
         <div class="student-panel" id="panel-student-history" data-panel-id="panel-student-history">
             <div class="panel-inner">
-                <h2 class="panel-subtitle">📈 學習歷程</h2>
+                <h2 class="panel-subtitle">📈 學習歷程(已上完之課程)</h2>
                 <div class="progress-chart-card">
                     <div class="year-switcher">
                         <button type="button" id="chart-year-prev" onclick="changeChartYear(-1)">⬅️</button>
@@ -537,9 +546,8 @@
                     <div class="pay-amount-block">
                         <span class="pay-amount-label">應繳金額</span>
                         <span class="pay-amount" id="pay-amount">$0</span>
-                        <span class="pay-hours" id="pay-hours"></span>
                     </div>
-                    <div id="pay-status-banner"></div>
+                    <p class="pay-breakdown" id="pay-breakdown"></p>
                 </div>
                 
                 <div id="pay-method-area"></div>
