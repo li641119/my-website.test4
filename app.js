@@ -247,6 +247,7 @@ onAuthStateChanged(auth, async (user) => {
             if (sidebar) sidebar.style.display = 'flex';
 
             startLiveSync();
+            startCoachPaymentWatcher();
         } else {
             let studentName = '';
             try {
@@ -273,8 +274,8 @@ onAuthStateChanged(auth, async (user) => {
 
             console.log("啟動學生模式，姓名比對用:", studentName || '(尚未找到對應姓名)');
             startStudentLiveSync(studentName);
+            startStudentPaymentWatchers(studentName);
             watchOverviewForStudent();
-            updateStudentPaymentStatus();
         }
 
         renderAll();
@@ -289,6 +290,8 @@ onAuthStateChanged(auth, async (user) => {
         currentUser = { uid: null, email: '', role: 'coach', name: '' };
 
         if (unsubscribe) unsubscribe();
+        stopCoachPaymentWatcher();
+        stopStudentPaymentWatchers();
     }
 });
 
@@ -601,6 +604,7 @@ window.renderOverviewPanel = function () {
     if (typeof window.renderTodaySchedule === 'function') {
         window.renderTodaySchedule();
     }
+    loadPaymentSettingsEditor();
 };
 
 // 收入數字的模糊/顯示切換（跟側邊欄那個是同一套邏輯，另外獨立一份給總覽頁用）
@@ -797,21 +801,7 @@ function startLiveSync() {
     });
 }
 
-async function updateStudentPaymentStatus() {
-    if (!currentUser || currentUser.role !== 'student' || !currentUser.name) return;
-    const now = new Date();
-    try {
-        const statuses = await window.loadIncomePaidStatuses(now.getFullYear(), now.getMonth());
-        const isPaid = statuses[currentUser.name] === true;
-        const statusDisplay = document.getElementById('student-class-count');
-        if (statusDisplay) {
-            statusDisplay.innerText = isPaid ? '已繳費' : '未繳費';
-            statusDisplay.style.color = isPaid ? '#2e7d32' : '#d32f2f';
-        }
-    } catch (err) {
-        console.error('讀取學生繳費狀態失敗:', err);
-    }
-}
+
 
 function renderStudentNextClassCard() {
     if (!currentUser || currentUser.role !== 'student' || !currentUser.name) return;
@@ -863,6 +853,7 @@ function startStudentLiveSync(studentName) {
         }
 
         renderStudentNextClassCard();
+        refreshStudentPaymentViews();
 
         if (typeof window.renderStudentMonthCalendar === 'function') {
             window.renderStudentMonthCalendar();
@@ -904,6 +895,8 @@ window.setIncomePaidStatus = async function (year, month, studentName, isPaid) {
             `💰 收款紀錄已更新：${year}-${String(month + 1).padStart(2, '0')} / ${studentName} / ${isPaid ? '已收款' : '待收款'}`
         );
 
+        await syncReportStatusWithPaid(year, month, studentName, isPaid);
+        
         return true;
 
     } catch (error) {
@@ -1072,6 +1065,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (targetPanelId === 'panel-student-history' && typeof window.renderProgressChart === 'function') {
                 window.renderProgressChart();
+            }
+            if (targetPanelId === 'panel-student-pay') {
+                renderStudentPayPanel();
             }
         });
     });
@@ -1373,3 +1369,521 @@ window.renderCoachOverview = function () {
 
 
 console.log("Firebase 監聽器已啟動");
+
+// ============================================================
+// 繳費流程：學生回報匯款 → 教練確認收款
+// monthIdx 一律是 JS 的 0~11
+// ============================================================
+let paySettings = {};
+let payCoachReports = {};
+let payStudentReports = {};
+let payStudentPaidMonths = {};
+let payUnsubCoach = null;
+let payUnsubStudent = [];
+let payQrDraft = { 1: null, 2: null };
+let payYear = new Date().getFullYear();
+let payMonthIdx = new Date().getMonth();
+let payCurrentAmount = 0;
+
+function payEscape(text) {
+    return String(text ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+}
+function payMonthKey(year, monthIdx) {
+    return `${year}-${String(monthIdx + 1).padStart(2, '0')}`;
+}
+function payMonthNumber(year, monthIdx) { return year * 12 + monthIdx; }
+function payReportId(year, monthIdx, studentName) {
+    return `${payMonthKey(year, monthIdx)}_${encodeURIComponent(studentName)}`;
+}
+function payReportCacheKey(year, monthIdx, studentName) {
+    return `${payMonthKey(year, monthIdx)}_${studentName}`;
+}
+function payFormatTime(iso) {
+    const t = iso ? new Date(iso) : null;
+    if (!t || isNaN(t.getTime())) return '';
+    return `${t.getMonth() + 1}/${t.getDate()} ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+}
+window.payFormatTime = payFormatTime;
+
+function payComputeAmount(year, monthIdx) {
+    if (typeof window.calculateMonthlyData !== 'function') return { amount: 0, minutes: 0 };
+    const d = window.calculateMonthlyData(year, monthIdx);
+    return { amount: Math.round(d.totalIncome), minutes: d.totalMinutes };
+}
+
+async function payCopyToClipboard(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch (_) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch (_) { /* 忽略 */ }
+        document.body.removeChild(ta);
+        return ok;
+    }
+}
+
+// ---------- 教練端：監聽所有回報 ----------
+window.getPaymentReport = function (year, monthIdx, studentName) {
+    return payCoachReports[payReportCacheKey(year, monthIdx, studentName)] || null;
+};
+
+function updateIncomeNavBadge() {
+    const btn = document.querySelector('.coach-nav-btn[data-panel="panel-income"]');
+    if (!btn) return;
+    const pending = Object.values(payCoachReports).filter(r => r.status === 'reported').length;
+    let badge = btn.querySelector('.nav-badge');
+    if (pending === 0) {
+        if (badge) badge.remove();
+        return;
+    }
+    if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'nav-badge';
+        btn.appendChild(badge);
+    }
+    badge.textContent = pending;
+}
+
+function startCoachPaymentWatcher() {
+    stopCoachPaymentWatcher();
+    payUnsubCoach = onSnapshot(collection(db, 'paymentReports'), (snap) => {
+        const cache = {};
+        snap.forEach((d) => {
+            const x = d.data();
+            cache[payReportCacheKey(x.year, x.month - 1, x.studentName)] = x;
+        });
+        payCoachReports = cache;
+        updateIncomeNavBadge();
+
+        const incomePanel = document.getElementById('panel-income');
+        if (incomePanel && incomePanel.classList.contains('active') &&
+            typeof window.renderIncomePanel === 'function') {
+            window.renderIncomePanel();
+        }
+    }, (err) => console.error('監聽匯款回報失敗:', err));
+}
+
+function stopCoachPaymentWatcher() {
+    if (payUnsubCoach) { payUnsubCoach(); payUnsubCoach = null; }
+    payCoachReports = {};
+    updateIncomeNavBadge();
+}
+
+// 教練勾選／取消「已收款」時，同步回報狀態（失敗不影響收款紀錄本身）
+async function syncReportStatusWithPaid(year, monthIdx, studentName, isPaid) {
+    try {
+        if (!payCoachReports[payReportCacheKey(year, monthIdx, studentName)]) return;
+        await setDoc(doc(db, 'paymentReports', payReportId(year, monthIdx, studentName)),
+            { status: isPaid ? 'confirmed' : 'reported' }, { merge: true });
+    } catch (err) {
+        console.error('同步回報狀態失敗:', err);
+    }
+}
+
+window.cancelPaymentReport = async function (year, monthIdx, studentName) {
+    if (!confirm(`確定要取消 [${studentName}] 的轉帳回報嗎？\n取消後會回到「待收款」，學生可以重新回報。`)) return;
+    try {
+        await deleteDoc(doc(db, 'paymentReports', payReportId(year, monthIdx, studentName)));
+    } catch (err) {
+        console.error('取消回報失敗:', err);
+        alert('取消失敗，請稍後再試');
+    }
+};
+
+// ---------- 教練端：收款資訊設定 ----------
+function renderPayQrPreview(slot) {
+    const el = document.getElementById(`pay-set-qr${slot}-preview`);
+    if (!el) return;
+    el.innerHTML = payQrDraft[slot]
+        ? `<img src="${payQrDraft[slot]}" alt="QR Code ${slot}">`
+        : '<span class="no-data-hint">尚未上傳</span>';
+}
+
+function payCompressImage(file) {
+    return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            const encode = (maxSide, quality) => {
+                const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+                const w = Math.max(1, Math.round(img.width * scale));
+                const h = Math.max(1, Math.round(img.height * scale));
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#ffffff';   // JPEG 沒有透明，先鋪白底，避免透明 QR 變黑底
+                ctx.fillRect(0, 0, w, h);
+                ctx.drawImage(img, 0, 0, w, h);
+                return canvas.toDataURL('image/jpeg', quality);
+            };
+            for (const [side, q] of [[480, 0.88], [480, 0.7], [360, 0.7], [320, 0.6]]) {
+                const out = encode(side, q);
+                if (out.length <= 300000) { resolve(out); return; }
+            }
+            reject(new Error('圖片太大，請換一張較小的圖'));
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error('無法讀取這個圖片檔'));
+        };
+        img.src = url;
+    });
+}
+
+async function handlePayQrFile(slot, file) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { alert('請選擇圖片檔'); return; }
+    try {
+        payQrDraft[slot] = await payCompressImage(file);
+        renderPayQrPreview(slot);
+    } catch (err) {
+        alert(err.message || '圖片處理失敗');
+    }
+}
+
+window.clearPaymentQr = function (slot) {
+    payQrDraft[slot] = null;
+    const input = document.getElementById(`pay-set-qr${slot}-file`);
+    if (input) input.value = '';
+    renderPayQrPreview(slot);
+};
+
+async function loadPaymentSettingsEditor() {
+    try {
+        const snap = await getDoc(doc(db, 'settings', 'payment'));
+        const s = snap.exists() ? snap.data() : {};
+        const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+        setVal('pay-set-bank-name', s.bankName);
+        setVal('pay-set-bank-code', s.bankCode);
+        setVal('pay-set-account', s.account);
+        setVal('pay-set-holder', s.holder);
+        setVal('pay-set-qr1-name', s.qr1 && s.qr1.name);
+        setVal('pay-set-qr2-name', s.qr2 && s.qr2.name);
+        payQrDraft[1] = (s.qr1 && s.qr1.dataUrl) || null;
+        payQrDraft[2] = (s.qr2 && s.qr2.dataUrl) || null;
+        renderPayQrPreview(1);
+        renderPayQrPreview(2);
+    } catch (err) {
+        console.error('讀取收款資訊失敗:', err);
+    }
+}
+
+window.savePaymentSettings = async function () {
+    const val = (id) => (document.getElementById(id)?.value || '').trim();
+    const qrEntry = (slot) => payQrDraft[slot]
+        ? { name: val(`pay-set-qr${slot}-name`) || `QR Code ${slot}`, dataUrl: payQrDraft[slot] }
+        : null;
+    try {
+        await setDoc(doc(db, 'settings', 'payment'), {
+            bankName: val('pay-set-bank-name'),
+            bankCode: val('pay-set-bank-code'),
+            account: val('pay-set-account'),
+            holder: val('pay-set-holder'),
+            qr1: qrEntry(1),
+            qr2: qrEntry(2),
+            updatedAt: new Date().toISOString()
+        });
+        alert('✅ 收款資訊已儲存，學生端會同步更新');
+    } catch (err) {
+        console.error('儲存收款資訊失敗:', err);
+        alert('儲存失敗，請稍後再試');
+    }
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    [1, 2].forEach((slot) => {
+        const input = document.getElementById(`pay-set-qr${slot}-file`);
+        if (input) input.addEventListener('change', (e) => handlePayQrFile(slot, e.target.files[0]));
+    });
+});
+
+// ---------- 學生端：監聽自己的繳費狀態、回報、收款資訊 ----------
+function stopStudentPaymentWatchers() {
+    payUnsubStudent.forEach((fn) => fn());
+    payUnsubStudent = [];
+    payStudentReports = {};
+    payStudentPaidMonths = {};
+}
+
+function startStudentPaymentWatchers(studentName) {
+    stopStudentPaymentWatchers();
+    if (!studentName) return;
+
+    payUnsubStudent.push(onSnapshot(
+        query(collection(db, 'incomeRecords'), where('studentName', '==', studentName)),
+        (snap) => {
+            const paid = {};
+            snap.forEach((d) => {
+                const x = d.data();
+                if (x.isPaid === true) paid[payMonthKey(x.year, x.month - 1)] = true;
+            });
+            payStudentPaidMonths = paid;
+            refreshStudentPaymentViews();
+        },
+        (err) => console.error('監聽繳費狀態失敗:', err)
+    ));
+
+    payUnsubStudent.push(onSnapshot(
+        query(collection(db, 'paymentReports'), where('studentName', '==', studentName)),
+        (snap) => {
+            const reports = {};
+            snap.forEach((d) => {
+                const x = d.data();
+                reports[payMonthKey(x.year, x.month - 1)] = x;
+            });
+            payStudentReports = reports;
+            refreshStudentPaymentViews();
+        },
+        (err) => console.error('監聽匯款回報失敗:', err)
+    ));
+
+    payUnsubStudent.push(onSnapshot(
+        doc(db, 'settings', 'payment'),
+        (snap) => {
+            paySettings = snap.exists() ? snap.data() : {};
+            refreshStudentPaymentViews();
+        },
+        (err) => console.error('監聽收款資訊失敗:', err)
+    ));
+}
+
+function refreshStudentPaymentViews() {
+    if (!currentUser || currentUser.role !== 'student') return;
+    updateHomePaymentCard();
+    const payPanel = document.getElementById('panel-student-pay');
+    if (payPanel && payPanel.classList.contains('active')) renderStudentPayPanel();
+}
+
+// 首頁「繳費情形」卡（以今天所在的月份為準）
+function updateHomePaymentCard() {
+    const el = document.getElementById('student-class-count');
+    if (!el) return;
+    const set = (text, color) => { el.innerText = text; el.style.color = color; };
+
+    const now = new Date();
+    const key = payMonthKey(now.getFullYear(), now.getMonth());
+    const report = payStudentReports[key];
+
+    if (payStudentPaidMonths[key] === true) { set('已繳費', '#2e7d32'); return; }
+    if (report && report.status === 'reported') { set('已回報，待確認', '#e67e22'); return; }
+    if (Array.isArray(window.courses) &&
+        payComputeAmount(now.getFullYear(), now.getMonth()).amount <= 0) {
+        set('本月無費用', '#7f8c8d');
+        return;
+    }
+    set('未繳費', '#d32f2f');
+}
+
+function payEarliestMonthNumber() {
+    const now = new Date();
+    let min = payMonthNumber(now.getFullYear(), now.getMonth());
+    (window.courses || []).forEach((c) => {
+        if (!c || c.type !== 'work' || !c.date) return;
+        const y = parseInt(c.date.slice(0, 4), 10);
+        const m = parseInt(c.date.slice(5, 7), 10) - 1;
+        if (Number.isFinite(y) && Number.isFinite(m)) min = Math.min(min, payMonthNumber(y, m));
+    });
+    return min;
+}
+
+window.changePayMonth = function (direction) {
+    const now = new Date();
+    const maxNum = payMonthNumber(now.getFullYear(), now.getMonth());
+    const minNum = Math.min(payEarliestMonthNumber(), maxNum);
+    const next = Math.max(minNum, Math.min(maxNum, payMonthNumber(payYear, payMonthIdx) + direction));
+    payYear = Math.floor(next / 12);
+    payMonthIdx = next % 12;
+    renderStudentPayPanel();
+};
+
+function setPayBanner(type, html) {
+    const el = document.getElementById('pay-status-banner');
+    if (el) el.innerHTML = `<div class="pay-banner pay-banner-${type}">${html}</div>`;
+}
+
+function renderPayMethodHtml(amount) {
+    const s = paySettings || {};
+    const qrs = [s.qr1, s.qr2].filter((q) => q && q.dataUrl);
+    if (!s.account && qrs.length === 0) {
+        return `<div class="pay-card"><p class="no-data-hint">教練尚未設定收款資訊，請直接聯繫教練。</p></div>`;
+    }
+
+    let html = '';
+    if (s.account) {
+        const bankText = `${payEscape(s.bankName || '')}${s.bankCode ? `（代碼 ${payEscape(s.bankCode)}）` : ''}`;
+        html += `
+            <div class="pay-card">
+                <h3 class="pay-section-title">🏦 銀行轉帳</h3>
+                ${bankText ? `<div class="pay-info-row"><span>銀行</span><strong>${bankText}</strong></div>` : ''}
+                <div class="pay-info-row"><span>帳號</span><strong>${payEscape(s.account)}</strong></div>
+                ${s.holder ? `<div class="pay-info-row"><span>戶名</span><strong>${payEscape(s.holder)}</strong></div>` : ''}
+                <div class="pay-info-row"><span>金額</span><strong>$${amount.toLocaleString()}</strong></div>
+                <div class="pay-copy-row">
+                    <button type="button" onclick="copyPayInfo('account', this)">複製帳號</button>
+                    <button type="button" onclick="copyPayInfo('amount', this)">複製金額</button>
+                    <button type="button" onclick="copyPayInfo('all', this)">複製全部資訊</button>
+                </div>
+            </div>`;
+    }
+    if (qrs.length > 0) {
+        html += `
+            <div class="pay-card">
+                <h3 class="pay-section-title">📱 行動支付 QR Code</h3>
+                <div class="pay-qr-grid">
+                    ${qrs.map((q) => `
+                        <figure class="pay-qr">
+                            <img src="${q.dataUrl}" alt="${payEscape(q.name)}">
+                            <figcaption>${payEscape(q.name)}</figcaption>
+                        </figure>`).join('')}
+                </div>
+                <p class="pay-qr-hint">掃碼時請輸入金額 $${amount.toLocaleString()}</p>
+            </div>`;
+    }
+    return html;
+}
+
+window.copyPayInfo = async function (kind, btn) {
+    const s = paySettings || {};
+    let text = '';
+    if (kind === 'account') {
+        text = s.account || '';
+    } else if (kind === 'amount') {
+        text = String(payCurrentAmount);
+    } else {
+        const bankLine = `${s.bankName || ''}${s.bankCode ? `（代碼 ${s.bankCode}）` : ''}`;
+        text = [
+            `銀行：${bankLine}`,
+            `帳號：${s.account || ''}`,
+            `戶名：${s.holder || ''}`,
+            `金額：$${payCurrentAmount.toLocaleString()}`
+        ].join('\n');
+    }
+
+    const ok = await payCopyToClipboard(text);
+    if (!ok) { alert('複製失敗，請手動長按文字複製'); return; }
+    if (btn) {
+        const original = btn.innerText;
+        btn.innerText = '已複製 ✓';
+        setTimeout(() => { btn.innerText = original; }, 1500);
+    }
+};
+
+function renderStudentPayPanel() {
+    if (!currentUser || currentUser.role !== 'student' || !currentUser.name) return;
+
+    const now = new Date();
+    const maxNum = payMonthNumber(now.getFullYear(), now.getMonth());
+    const minNum = Math.min(payEarliestMonthNumber(), maxNum);
+    const curNum = Math.max(minNum, Math.min(maxNum, payMonthNumber(payYear, payMonthIdx)));
+    payYear = Math.floor(curNum / 12);
+    payMonthIdx = curNum % 12;
+
+    const labelEl = document.getElementById('pay-month-label');
+    if (labelEl) labelEl.innerText = `${payYear} 年 ${payMonthIdx + 1} 月`;
+    const prevBtn = document.getElementById('pay-month-prev');
+    const nextBtn = document.getElementById('pay-month-next');
+    if (prevBtn) prevBtn.disabled = curNum <= minNum;
+    if (nextBtn) nextBtn.disabled = curNum >= maxNum;
+
+    const { amount, minutes } = payComputeAmount(payYear, payMonthIdx);
+    payCurrentAmount = amount;
+
+    const amountEl = document.getElementById('pay-amount');
+    const hoursEl = document.getElementById('pay-hours');
+    if (amountEl) amountEl.innerText = `$${amount.toLocaleString()}`;
+    if (hoursEl) hoursEl.innerText = `共 ${Number((minutes / 60).toFixed(2))} 小時`;
+
+    const methodEl = document.getElementById('pay-method-area');
+    const reportEl = document.getElementById('pay-report-area');
+    const key = payMonthKey(payYear, payMonthIdx);
+    const paid = payStudentPaidMonths[key] === true;
+    const report = payStudentReports[key] || null;
+
+    if (amount <= 0) {
+        setPayBanner('none', '這個月沒有需要繳費的課程');
+        if (methodEl) methodEl.innerHTML = '';
+        if (reportEl) reportEl.innerHTML = '';
+        return;
+    }
+    if (paid) {
+        setPayBanner('paid', '✅ 已繳費<br><small>教練已確認收款，謝謝！</small>');
+        if (methodEl) methodEl.innerHTML = '';
+        if (reportEl) reportEl.innerHTML = '';
+        return;
+    }
+
+    if (methodEl) methodEl.innerHTML = renderPayMethodHtml(amount);
+
+    if (report && report.status === 'reported') {
+        setPayBanner('reported',
+            `⏳ 已回報，等待教練確認<br><small>後五碼 ${payEscape(report.last5)}｜${payEscape(payFormatTime(report.reportedAt))}</small>`);
+        if (reportEl) reportEl.innerHTML =
+            `<button type="button" class="pay-report-btn" disabled>已回報，等待教練確認</button>`;
+    } else {
+        setPayBanner('unpaid', '尚未繳費');
+        if (reportEl) reportEl.innerHTML =
+            `<button type="button" class="pay-report-btn" onclick="openReportModal()">已匯款，回報繳費狀況</button>`;
+    }
+}
+
+// ---------- 學生端：回報視窗 ----------
+window.openReportModal = function () {
+    if (payCurrentAmount <= 0) return;
+    document.getElementById('report-modal-summary').innerText =
+        `${payYear} 年 ${payMonthIdx + 1} 月　應繳 $${payCurrentAmount.toLocaleString()}`;
+    const input = document.getElementById('report-last5');
+    input.value = '';
+    document.getElementById('report-error').textContent = '';
+    document.getElementById('report-form-state').classList.remove('hide');
+    document.getElementById('report-done-state').classList.add('hide');
+    document.getElementById('report-modal').classList.remove('hide');
+    input.focus();
+};
+
+window.closeReportModal = function () {
+    document.getElementById('report-modal').classList.add('hide');
+};
+
+window.submitPaymentReport = async function () {
+    const last5 = document.getElementById('report-last5').value.trim();
+    const errEl = document.getElementById('report-error');
+    const submitBtn = document.getElementById('report-submit-btn');
+    errEl.textContent = '';
+
+    if (!/^\d{5}$/.test(last5)) {
+        errEl.textContent = '請輸入 5 位數字的匯款帳號後五碼';
+        return;
+    }
+    if (!currentUser || !currentUser.name || payCurrentAmount <= 0) return;
+
+    submitBtn.disabled = true;
+    try {
+        await setDoc(doc(db, 'paymentReports', payReportId(payYear, payMonthIdx, currentUser.name)), {
+            studentName: currentUser.name,
+            year: payYear,
+            month: payMonthIdx + 1,
+            amount: payCurrentAmount,
+            last5,
+            status: 'reported',
+            reportedAt: new Date().toISOString()
+        });
+        document.getElementById('report-form-state').classList.add('hide');
+        document.getElementById('report-done-state').classList.remove('hide');
+    } catch (err) {
+        console.error('送出回報失敗:', err);
+        errEl.textContent = '送出失敗，請稍後再試';
+    } finally {
+        submitBtn.disabled = false;
+    }
+};

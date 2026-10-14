@@ -863,52 +863,48 @@ export async function renderIncomePanel() {
             `$${Math.round(pendingIncome).toLocaleString()}`;
     }
 
-    breakdownEl.innerHTML =
-        entries.map(
-            ([name, data]) => {
+        breakdownEl.innerHTML = entries.map(([name, data]) => {
+        const isPaid = getIncomePaidStatus(year, month, name);
+        const report = typeof window.getPaymentReport === 'function'
+            ? window.getPaymentReport(year, month, name)
+            : null;
+        // 優先順序：已收款 > 學生已轉帳 > 待收款
+        const isReported = !isPaid && !!report && report.status === 'reported';
 
-                const isPaid =
-                    getIncomePaidStatus(
-                        year,
-                        month,
-                        name
-                    );
+        // 避免學生姓名裡的特殊字元破壞 onclick
+        const safeName = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const money = Math.round(data.money);
 
-                // 避免學生姓名裡的特殊字元破壞 onclick
-                const safeName =
-                    name
-                        .replace(/\\/g, '\\\\')
-                        .replace(/'/g, "\\'");
+        let reportTag = '';
+        if (isReported) {
+            const reportAmount = Number(report.amount) || 0;
+            const last5 = String(report.last5 || '').replace(/[^0-9]/g, '');
+            const timeText = window.payFormatTime ? window.payFormatTime(report.reportedAt) : '';
+            const warn = reportAmount !== money
+                ? `<span class="income-report-warn">⚠️ 與目前應收 $${money.toLocaleString()} 不同</span>`
+                : '';
+            reportTag = `
+                <div class="income-report-tag">
+                    <span class="income-report-badge">學生已轉帳</span>
+                    <span>$${reportAmount.toLocaleString()}｜後五碼 ${last5}｜${timeText}</span>
+                    ${warn}
+                    <button type="button" class="cancel-report-btn"
+                        onclick="cancelPaymentReport(${year}, ${month}, '${safeName}')">取消回報</button>
+                </div>`;
+        }
 
-                return `
-                    <div class="db-row income-student-row ${isPaid ? 'is-paid' : ''}">
-
-                        <label class="income-paid-checkbox">
-
-                            <input
-                                type="checkbox"
-                                ${isPaid ? 'checked' : ''}
-                                onchange="toggleIncomePaid('${safeName}', this.checked)"
-                            >
-
-                            <span>已收款</span>
-
-                        </label>
-
-                        <span class="db-name">
-                            ${name}
-                        </span>
-
-                        <span class="db-meta">
-                            ${(data.mins / 60).toFixed(1)} 小時
-                            ·
-                            $${Math.round(data.money).toLocaleString()}
-                        </span>
-
-                    </div>
-                `;
-            }
-        ).join('');
+        return `
+            <div class="db-row income-student-row ${isPaid ? 'is-paid' : ''} ${isReported ? 'is-reported' : ''}">
+                <label class="income-paid-checkbox">
+                    <input type="checkbox" ${isPaid ? 'checked' : ''}
+                        onchange="toggleIncomePaid('${safeName}', this.checked)">
+                    <span>已收款</span>
+                </label>
+                <span class="db-name">${name}</span>
+                <span class="db-meta">${(data.mins / 60).toFixed(1)} 小時 · $${money.toLocaleString()}</span>
+                ${reportTag}
+            </div>`;
+    }).join('');
 }
 
 // 保留給 app.js / HTML 導覽列使用

@@ -85,8 +85,8 @@
             <div class="coach-panel" id="panel-overview" data-panel-id="panel-overview">
                 <div class="panel-inner">
 
-                    <h3 class="panel-subtitle">📍 今日行程 <span id="overview-today-date"></span></h3>
                     <div class="overview-today-block">
+                        <h3 class="panel-subtitle">今日行程 <span id="overview-today-date"></span></h3>
                         <div id="overview-today-list" class="today-list">
                             <p class="no-data-hint">讀取中...</p>
                         </div>
@@ -94,21 +94,24 @@
 
                     <div class="overview-stats-row">
                         <div class="overview-workhour">
-                            <h3 class="panel-subtitle">⏰ 工作時數</h3>
+                            <h3 class="panel-subtitle">工作時數</h3>
                             <div class="overview-stat-block">
-                                <p>當週：<strong id="overview-week-hours">0</strong> 小時，當月：<strong id="overview-month-hours">0</strong> 小時</p>
+                                <p>當週：<strong id="overview-week-hours"  class="hour-amount">0</strong> 小時，當月：<strong id="overview-month-hours"  class="hour-amount">0</strong></p>
                             </div>
                         </div>
+                        
                         <div class="overview-income">
-                            <h3 class="panel-subtitle">💰 收入</h3>
+                            <h3 class="panel-subtitle">收入</h3>
                             <div class="overview-stat-block">
-                                <p>當月收入：<strong id="overview-month-income" class="income-amount">0</strong> 元
+                                <p>當月收入：<strong id="overview-month-income" class="income-amount">0</strong>  元
                                     <button type="button" id="overview-income-toggle" class="toggle-income-btn">查看</button>
                                 </p>
                             </div>
                         </div>
-                        <div>
-                            <h3 class="panel-subtitle">💡 待辦事項</h3>
+
+                        <div class="overview-memo">
+                            <h3 class="panel-subtitle">待辦事項</h3>
+                            <div class="overview-stat-block"></div>
                         </div>
                     </div>
 
@@ -129,6 +132,32 @@
                                 <button type="button" class="overview-publish-btn" onclick="publishOverview()">更新</button>
                             </div>
                         </div>
+                    </div>
+                    
+                    <h3 class="panel-subtitle">💳 收款資訊設定</h3>
+                    <div class="payment-settings-card">
+                        <p class="payment-settings-hint">學生在「前往繳費」頁會看到這裡的資訊，欄位留空就不顯示。</p>
+                        <div class="payment-settings-grid">
+                            <label>銀行名稱<input type="text" id="pay-set-bank-name" placeholder="例如：中國信託"></label>
+                            <label>銀行代碼<input type="text" id="pay-set-bank-code" inputmode="numeric" placeholder="例如：822"></label>
+                            <label>帳號<input type="text" id="pay-set-account" inputmode="numeric"></label>
+                            <label>戶名<input type="text" id="pay-set-holder"></label>
+                        </div>
+                        <div class="payment-qr-editors">
+                            <div class="payment-qr-editor">
+                                <label>QR Code 1 名稱<input type="text" id="pay-set-qr1-name" placeholder="例如：街口支付"></label>
+                                <input type="file" id="pay-set-qr1-file" accept="image/*">
+                                <div class="payment-qr-preview" id="pay-set-qr1-preview"></div>
+                                <button type="button" class="payment-qr-remove" onclick="clearPaymentQr(1)">移除圖片</button>
+                            </div>
+                            <div class="payment-qr-editor">
+                                <label>QR Code 2 名稱<input type="text" id="pay-set-qr2-name" placeholder="例如：LINE Pay"></label>
+                                <input type="file" id="pay-set-qr2-file" accept="image/*">
+                                <div class="payment-qr-preview" id="pay-set-qr2-preview"></div>
+                                <button type="button" class="payment-qr-remove" onclick="clearPaymentQr(2)">移除圖片</button>
+                            </div>
+                        </div>
+                        <button type="button" class="overview-save-btn" onclick="savePaymentSettings()">儲存收款資訊</button>
                     </div>
 
                     
@@ -399,30 +428,40 @@
             <button type="button" class="student-nav-btn active" data-panel="panel-student-home">🏠 首頁</button>
             <button type="button" class="student-nav-btn" data-panel="panel-student-calendar">📅 課程日曆</button>
             <button type="button" class="student-nav-btn" data-panel="panel-student-history">💰 上課紀錄</button>
+            <button type="button" class="student-nav-btn" data-panel="panel-student-pay">💳 前往繳費</button>
             <button type="button" class="student-nav-btn" id="student-logout-btn">登出</button>
         </div>
 
         <!-- 首頁 -->
         <div class="student-panel active" id="panel-student-home" data-panel-id="panel-student-home">
             <div class="panel-inner">
-                <h3> Welcome back!<span id="student-name-display">同學</span></h3>
+            <div class="panel-subtitle"> Welcome back!<span id="student-name-display">同學</span></div>
                 <div class="student-header">
-                    <div class="student-notice-card">
-                        <span>本月上課時數</span>
-                        <span class="stat-value" id="student-total-hours">0.0</span>
-                    </div>   
-                        
-                    <div class="student-stat-row">
-                        <div class="student-stat-card">
-                            <span>繳費情形</span>
-                            <span class="stat-value" id="student-class-count">未繳費</span>
+                    <div class="student-lesson">
+                        <div class="student-lesson-card">
+                            <span>本月上課時數</span>
+                            <span class="stat-value" id="student-total-hours">0.0</span>
                         </div>
 
-                        <div class="student-stat-card">
-                            <span>下次上課</span>
-                            <span class="stat-value" id="student-next-class" style="font-size:16px;">讀取中...</span>
+                        <div class="student-lesson-card">
+                            <span>本月上課金額</span>
+                            <span class="stat-value" id="student-total-hours">NT$ 0.0</span>
                         </div>
+                            
+                    </div>   
+                        
+                    <h3 style="margin: 16px 0; font-size: 16px; line-height: 1.5; color: #586773;">💰 課程與費用</h3>
+
+                    <div class="student-pay-card">
+                        <span>繳費情形</span>
+                        <span class="stat-value" id="student-class-count" style="font-size:16px;">未繳費</span>
                     </div>
+
+                    <div class="student-stat-card">
+                        <span>下次上課</span>
+                        <span class="stat-value" id="student-next-class" style="font-size:16px;">讀取中...</span>
+                    </div>
+                    
                 </div>
 
                 <div class="student-notice-card">
@@ -439,43 +478,99 @@
 
         <!-- 我的課程 -->   
         <div class="student-panel" id="panel-student-calendar" data-panel-id="panel-student-calendar">
-            <div class="month-calendar-header">
-                <button type="button" onclick="changeStudentMonth(-1)">⬅️</button>
-                <h3 id="student-month-label">讀取中...</h3>
-                <button type="button" onclick="changeStudentMonth(1)">➡️</button>
-            </div>
-            <div class="month-calendar-grid" id="student-month-grid"></div>
-            <div class="month-day-detail" id="student-day-detail">
-                <p class="no-data-hint">點選上面有標色的日期查看上課細節</p>
+            <div class="panel-inner student-calendar-layout">
+                
+                <!-- 左側：月曆 -->
+                <div class="calendar-col">
+                    <div class="month-calendar-header">
+                        <button type="button" onclick="changeStudentMonth(-1)">⬅️</button>
+                        <h3 id="student-month-label">讀取中...</h3>
+                        <button type="button" onclick="changeStudentMonth(1)">➡️</button>
+                    </div>
+                            
+                    <div class="month-calendar-grid" id="student-month-grid"></div>
+                </div>
+            
+                <!-- 右側：課程詳細資訊 -->
+                <div class="month-day-detail" id="student-day-detail">
+                    <p class="no-data-hint">點選上面有標色的日期查看上課細節</p>
+                </div>
+
             </div>
         </div>
 
-            <!-- 上課紀錄 -->
+        <!-- 上課紀錄 -->
         <div class="student-panel" id="panel-student-history" data-panel-id="panel-student-history">
-            <div class="progress-chart-card">
-                <h3 class="panel-subtitle">📈 學習歷程</h3>
-                <div class="year-switcher">
-                    <button type="button" id="chart-year-prev" onclick="changeChartYear(-1)">◀</button>
-                    <span id="chart-year-label"></span>
-                    <button type="button" id="chart-year-next" onclick="changeChartYear(1)">▶</button>
-                    <span id="chart-year-total" class="chart-year-total"></span>
+            <div class="panel-inner">
+                <h2 class="panel-subtitle">📈 學習歷程</h2>
+                <div class="progress-chart-card">
+                    <div class="year-switcher">
+                        <button type="button" id="chart-year-prev" onclick="changeChartYear(-1)">⬅️</button>
+                        <span id="chart-year-label"></span>
+                        <button type="button" id="chart-year-next" onclick="changeChartYear(1)">➡️</button>
+                        <span id="chart-year-total" class="chart-year-total"></span>
+                    </div>
+                    <div id="progress-chart"></div>
                 </div>
-                <div id="progress-chart"></div>
-            </div>
 
-            <h2 class="panel-title">上課紀錄查詢</h2>
+                <h2 class="panel-subtitle">🔍 上課紀錄查詢</h2>
 
-            <div class="history-query-row">
-                <input type="date" id="student-history-start">
-                <span>至</span>
-                <input type="date" id="student-history-end">
-                <button type="button" onclick="queryMyHistory()">查詢</button>
+                <div class="history-query-row">
+                    <input type="date" id="student-history-start">
+                    <span>至</span>
+                    <input type="date" id="student-history-end">
+                    <button type="button" onclick="queryMyHistory()">查詢</button>
+                </div>
+                <p class="history-result" id="student-history-result">選擇開始與結束日期後點「查詢」</p>
             </div>
-            <p class="history-result" id="student-history-result">選擇開始與結束日期後點「查詢」</p>
+        </div>
+
+        <!-- 前往繳費 -->
+        <div class="student-panel" id="panel-student-pay" data-panel-id="panel-student-pay">
+            <div class="panel-inner">
+                <div class="pay-card">
+                    <div class="pay-month-switcher">
+                        <button type="button" id="pay-month-prev" onclick="changePayMonth(-1)">◀</button>
+                        <span id="pay-month-label"></span>
+                        <button type="button" id="pay-month-next" onclick="changePayMonth(1)">▶</button>
+                    </div>
+                    <div class="pay-amount-block">
+                        <span class="pay-amount-label">應繳金額</span>
+                        <span class="pay-amount" id="pay-amount">$0</span>
+                        <span class="pay-hours" id="pay-hours"></span>
+                    </div>
+                    <div id="pay-status-banner"></div>
+                </div>
+                
+                <div id="pay-method-area"></div>
+                <div id="pay-report-area"></div>
+            </div>
+                
         </div>
     </div>
 
-    
+    <div id="report-modal" class="report-modal hide">
+        <div class="report-modal-content">
+            <div id="report-form-state">
+                <h3>回報已匯款</h3>
+                <p id="report-modal-summary" class="report-modal-summary"></p>
+                <label for="report-last5">匯款帳號後五碼（必填）</label>
+                <input type="text" id="report-last5" inputmode="numeric" maxlength="5" placeholder="例如 12345" autocomplete="off">
+                <p id="report-error" class="report-error"></p>
+                <div class="report-modal-actions">
+                    <button type="button" class="report-btn" onclick="closeReportModal()">取消</button>
+                    <button type="button" id="report-submit-btn" class="report-btn report-btn-primary" onclick="submitPaymentReport()">送出回報</button>
+                </div>
+            </div>
+            <div id="report-done-state" class="hide">
+                <h3>✅ 已回報教練</h3>
+                <p>教練核對入帳後會確認收款，這個頁面的狀態會自動更新。</p>
+                <div class="report-modal-actions">
+                    <button type="button" class="report-btn report-btn-primary" onclick="closeReportModal()">我知道了</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
 <script type="module" src="app.js"></script>
 <script type="module" src="cal-gemini.js"></script>
