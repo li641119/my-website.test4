@@ -104,7 +104,7 @@
                         <div class="overview-income">
                             <h3 class="panel-subtitle">收入</h3>
                             <div class="overview-stat-block">
-                                <div>本月預定收入：<strong id="overview-month-income" class="income-amount">0</strong>  元
+                                <div>本月預定收入：<strong id="overview-month-income" class="income-amount">0</strong>
                                     <button type="button" id="overview-income-toggle" class="toggle-income-btn">查看</button>
                                 </div>
                             </div>
@@ -436,7 +436,11 @@
         <!-- 首頁 -->
         <div class="student-panel active" id="panel-student-home" data-panel-id="panel-student-home">
             <div class="panel-inner">
-            <div class="panel-subtitle"> Welcome back!<span id="student-name-display">同學</span></div>
+
+                <div class="panel-subtitle"> Welcome back!
+                    <span id="student-name-display">同學</span>
+                </div>
+                
                 <div class="student-header">
                     <div class="student-lesson">
                         <div class="student-stat-card">
@@ -448,9 +452,9 @@
                         </div>
 
                         <div class="student-stat-card">
-                            <span>本月上課費用</span>
+                            <span>本月預定費用</span>
                             <div class="student-stat-arrange">
-                                <span class="stat-value" id="student-class-count">未繳費</span>
+                                <span class="stat-value" id="student-class-count">—</span>
                                 <span class="stat-sub" id="student-class-count-sub"></span>
                             </div>
                         </div>
@@ -461,7 +465,7 @@
 
                     <div class="student-pay-card">
                         <span>本月繳費情形</span>
-                        <span class="stat-value" id="student-class-count" style="font-size:16px;">未繳費</span>
+                        <span class="stat-value" id="student-payment-status" style="font-size:16px; color: #d32f2f;">未繳費</span>
                     </div>
 
                     <div class="student-next-card">
@@ -511,7 +515,7 @@
         <!-- 上課紀錄 -->
         <div class="student-panel" id="panel-student-history" data-panel-id="panel-student-history">
             <div class="panel-inner">
-                <h2 class="panel-subtitle">📈 學習歷程(已上完之課程)</h2>
+                <h2 class="panel-subtitle">📈 學習歷程</h2>
                 <div class="progress-chart-card">
                     <div class="year-switcher">
                         <button type="button" id="chart-year-prev" onclick="changeChartYear(-1)">⬅️</button>
@@ -546,6 +550,7 @@
                     <div class="pay-amount-block">
                         <span class="pay-amount-label">應繳金額</span>
                         <span class="pay-amount" id="pay-amount">$0</span>
+                        <span class="pay-hours" id="pay-hours"></span>
                     </div>
                     <p class="pay-breakdown" id="pay-breakdown"></p>
                 </div>

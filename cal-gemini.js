@@ -898,7 +898,8 @@ export async function renderIncomePanel() {
                 <label class="income-paid-checkbox">
                     <input type="checkbox" ${isPaid ? 'checked' : ''}
                         onchange="toggleIncomePaid('${safeName}', this.checked)">
-                    <span>已收款</span><span class="db-name">${name}</span>
+                    <span>已收款</span>
+                    <span class="db-name">${name}</span>
                     <span class="db-meta">${(data.mins / 60).toFixed(1)} 小時 · $${money.toLocaleString()}</span>
                 </label>
                 
@@ -1478,7 +1479,7 @@ function renderTodaySchedule() {
         .sort((a, b) => (a.start || '').localeCompare(b.start || ''));
 
     if (todays.length === 0) {
-        listEl.innerHTML = '<p class="no-data-hint">今天沒有行程</p>';
+        listEl.innerHTML = '<p class="no-data-hint" style="text-align: left" >今天沒有行程</p>';
         return;
     }
 

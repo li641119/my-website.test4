@@ -382,6 +382,15 @@ body {
     color: #2c3e50;
 }
 
+#panel-overview .overview-income .overview-stat-block > div {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 30px;
+    gap: 6px;
+}
+
 .overview-stat-block {
     flex: 1;
     display: flex;
@@ -933,7 +942,7 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 .db-row .db-name {
     color: #2c3e50;
     font-size: 16px;
-    margin-bottom: 4px;
+    font-weight: 600;
 }
 
 .db-row .db-meta {
@@ -1227,6 +1236,12 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     width: 100%;
 }
 
+.student-lesson{
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    gap: 30px;
+}
 
 .student-stat-card {
     background: transparent;
@@ -1240,9 +1255,21 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     flex-direction: column;
 }
 
+.student-stat-card .stat-sub {
+    margin-left: auto;
+    font-size: 12px;
+    color: #607d8b;
+}
+
+.student-stat-arrange{
+    display: flex;
+    flex-direction: row;
+    align-items: flex-end;
+}
+
 .student-next-card{
     background: transparent;
-    border: none;
+    border-top: 1.5px solid #E2E7EB;
     margin: 10px 0;
 
     padding: 10px 20px;
@@ -1269,6 +1296,23 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     margin-top: 5px;
 }
 
+.student-notice-card, .student-slots-card {
+    background: transparent;
+    border-top: 1.5px solid #E2E7EB;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 16px 0;
+}
+
+.student-notice-card h3, 
+.student-slots-card h3,
+.student-pay-card,
+.student-next-card {
+    margin: 0 0 5px;
+    font-size: 16px;
+    line-height: 1.5;
+    color: #586773;
+}
 
 .calendar-event-card {
     position: relative;
@@ -1443,10 +1487,7 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     margin-top: 24px;
 }
 
-@media (max-width: 768px) {
-    .lesson-item { flex-wrap: wrap; gap: 4px 10px; }
-    .lesson-loc { flex-basis: 100%; }
-}
+
 
 .custom-loc-input {
     display: none;
@@ -1513,124 +1554,8 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 }
 
 
-@media (max-width: 768px) {
-    .main-wrapper {
-        flex-direction: column;
-        padding: 10px;
-        gap: 10px;
-    }
 
-    .sidebar {
-        width: 100%;
-        box-sizing: border-box;
-        order: 2;
-        padding: 15px;
-    }
-    
-    #monthly-stats {max-height: 200px;}
 
-    .calendar-container {
-        padding: 8px;
-        order: 1;
-        overflow-x: auto;
-    }
-
-    .schedule-grid {
-        grid-template-columns: 45px repeat(7, 120px);
-        min-width: 885px;
-    }
-
-    .time-column {
-        position: sticky;
-        left: 0;
-        z-index: 25;
-        background: #fcfcfc;
-        font-size: 10px;
-    }
-
-    .day-header {
-        font-size: 11px;
-        position: sticky;
-        top: 0;
-        z-index: 20;
-    }
-
-    .placed-event {
-        padding: 1px 2px;
-        font-size: 10px;
-    }
-    
-    .placed-event strong {font-size: 11px;}
-
-    .floating-controls {
-        bottom: 20px;
-        right: 20px;
-        gap: 5px;
-    }
-
-    .floating-controls button {
-        padding: 10px 14px;
-        font-size: 14px;
-    }
-
-    /* ▼▼▼ 修正問題2：手機版新增行事曆彈窗，讓內容自己有捲動範圍、按鈕永遠按得到 ▼▼▼ */
-    .modal-content {
-        width: 92%;
-        /* 修改：margin 從 20% auto 改成 4vh auto。
-           20% 在手機上等於把彈窗往下推掉螢幕高度的 1/5，
-           內容一多，下面的按鈕就會被推出可視範圍外。 */
-        margin: 4vh auto;
-        padding: 18px;
-        /* 新增：限制彈窗最大高度為視窗的 88%，內容超過時彈窗自己捲動，
-           不再只依賴外層 #eventModal 的捲動（手機瀏覽器對 fixed + 100% 高度常有相容性問題）。 */
-        max-height: 88vh;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-
-    /* 新增：按鈕列在手機上黏在彈窗底部，不管表單多長，永遠看得到、按得到，
-       解決「滑不到儲存/取消按鈕」的問題。 */
-    .modal-buttons {
-        position: sticky;
-        bottom: 0;
-        background-color: #fefefe;
-        padding-top: 12px;
-        padding-bottom: 4px;
-        margin-top: 12px;
-    }
-
-    .modal-buttons button {
-        /* 修改：手機版拿掉 120px 上限，按鈕平分寬度，觸控範圍更大更好按 */
-        max-width: none;
-    }
-    /* ▲▲▲ 修正結束 ▲▲▲ */
-
-    .time-row {
-        flex-direction: column;
-        gap: 0;
-    }
-
-    .modal-content input, .modal-content select {
-        font-size: 16px;
-        padding: 12px;
-    }
-
-     .auth-box {
-        padding: 28px 24px 24px;
-    }
-}
-
-@media (max-width: 480px) {
-    .calendar-header h3 {font-size: 14px;}
-    .day-header {padding: 2px;}
-}
-
-.student-lesson{
-    flex: 1;
-    display: flex;
-    flex-direction: row;
-    gap: 30px;
-}
 
 .student-lesson-card{
     flex: 1;
@@ -1645,21 +1570,7 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     box-sizing: border-box;
 }
     
-/* 學生端公告卡片 */
-.student-notice-card, .student-slots-card {
-    background: transparent;
-    border-top: 1.5px solid #E2E7EB;
-    border-radius: 0;
-    box-shadow: none;
-    padding: 16px 0;
-}
 
-.student-notice-card h3, .student-slots-card h3 {
-    margin: 0 0 5px;
-    font-size: 16px;
-    line-height: 1.5;
-    color: #586773;
-}
 
 
 
@@ -1674,34 +1585,7 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     color: #2c3e50;
 }
 
-@media (max-width: 768px) {
-    .overview-grid { flex-direction: column; }
-    .overview-action-col { flex-direction: row; padding-top: 0; }
-    .overview-action-col button { flex: 1; }
-}
 
-/* 手機版：改成上下排列 */
-@media (max-width: 768px) {
-    .student-calendar-layout {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 16px;
-        margin: 16px;
-    }
-
-    .month-calendar-grid {
-        max-height: none;
-        overflow-y: visible;
-    }
-
-    .month-cell {
-        height: 48px;
-    }
-
-    .month-day-detail {
-        position: static;
-        max-height: none;
-    }
-}
 
 .month-calendar-grid {
     display: grid;
@@ -1773,40 +1657,6 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     color: #2c3e50;
     margin: 10px 0 0;
 }
-
-
-@media (max-width: 768px) {
-    .coach-nav {
-        padding: 10px 12px;
-        overflow-x: auto;
-    }
-    .coach-nav-btn {
-        flex-shrink: 0;
-        padding: 8px 12px;
-        font-size: 13px;
-    }
-    .panel-inner {
-        padding: 16px;
-    }
-    .income-summary-row {
-        flex-direction: column;
-    }
-}
-
-@media (max-width: 800px) {
-
-    .income-summary-row {
-        flex-wrap: wrap;
-    }
-
-    .income-summary-card {
-        flex: 1 1 calc(50% - 10px);
-        min-width: 140px;
-    }
-
-}
-
-
 
 #panel-income .panel-inner {
     width: 100%;
@@ -1906,10 +1756,6 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 .today-name { font-weight: 600; color: #2c3e50; }
 .today-loc { color: #7f8c8d; }
 
-@media (max-width: 768px) {
-    .today-item { flex-wrap: wrap; gap: 4px 10px; }
-}
-
 #student-next-class { line-height: 1.4; }
 
 /* 學習歷程折線圖 */
@@ -1973,10 +1819,6 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     height: 250px;
 }
 
-@media (max-width: 480px) {
-    .year-switcher { flex-wrap: wrap; }
-    .chart-year-total { flex-basis: 100%; margin-left: 0; }
-}
 
 /* ===== 繳費流程 ===== */
 
@@ -2231,26 +2073,9 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 .report-btn-primary { background: #2e7d32; color: #fff; }
 .report-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
-@media (max-width: 768px) {
-    .payment-settings-grid,
-    .payment-qr-editors { grid-template-columns: 1fr; }
-}
 
-@media (max-width: 480px) {
-    .student-nav-btn { font-size: 12px; padding: 10px 4px; }
-}
 
-.student-stat-card .stat-sub {
-    margin-left: auto;
-    font-size: 12px;
-    color: #607d8b;
-}
 
-.student-stat-arrange{
-    display: flex;
-    flex-direction: row;
-    align-items: flex-end;
-}
 
 .pay-breakdown {
     margin: 0 0 12px;
@@ -2275,3 +2100,399 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 
 .history-tag-done { background: #e0f2f1; color: #00796b; }
 .history-tag-sched { background: #eef1f3; color: #546e7a; }
+
+
+/* ========================================
+   RWD：手機版共用設定
+   ======================================== */
+
+@media (max-width: 768px) {
+
+    /* 1. 全域尺寸與防止內容溢出 */
+    .main-wrapper,
+    .panel-inner,
+    .calendar-container,
+    .sidebar,
+    .modal-content,
+    .student-calendar-layout,
+    .payment-settings-grid,
+    .payment-qr-editors,
+    .overview-grid,
+    .income-summary-row {
+        box-sizing: border-box;
+        min-width: 0;
+    }
+
+    .main-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding: 12px;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .panel-inner {
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+        padding: 16px;
+    }
+
+    /* 2. 表單與付款設定 */
+    .payment-settings-grid,
+    .payment-qr-editors {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 16px;
+    }
+
+    .modal-content input,
+    .modal-content select,
+    .modal-content textarea {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        font-size: 16px;
+        padding: 12px;
+    }
+
+    .time-row {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    /* 3. 教練側邊欄與統計 */
+    .sidebar {
+        order: 2;
+        width: 100%;
+        padding: 16px;
+    }
+
+    #monthly-stats {
+        max-height: 260px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* 4. 週行事曆
+       只允許日曆區域水平捲動，不讓整頁變寬 */
+    .calendar-container {
+        order: 1;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        padding: 8px;
+        overflow-x: auto;
+        overflow-y: visible;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+    }
+
+    .schedule-grid {
+        grid-template-columns: 48px repeat(7, minmax(100px, 1fr));
+        min-width: 748px;
+    }
+
+    .time-column {
+        position: sticky;
+        left: 0;
+        z-index: 25;
+        background: #fcfcfc;
+        font-size: 11px;
+    }
+
+    .day-header {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        font-size: 12px;
+        padding: 6px 4px;
+    }
+
+    .placed-event {
+        padding: 4px;
+        font-size: 11px;
+        overflow-wrap: anywhere;
+    }
+
+    .placed-event strong {
+        font-size: 12px;
+    }
+
+    /* 5. 月曆與學生課程頁面 */
+    .student-calendar-layout {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 16px;
+        width: 100%;
+        margin: 12px 0;
+    }
+
+    .month-calendar-grid {
+        width: 100%;
+        max-height: none;
+        overflow: visible;
+        min-width: 0;
+    }
+
+    .month-cell {
+        box-sizing: border-box;
+        min-width: 0;
+        height: auto;
+        min-height: 48px;
+        padding: 4px 2px;
+        overflow-wrap: anywhere;
+    }
+
+    .month-day-detail {
+        position: static;
+        width: 100%;
+        max-height: none;
+        overflow: visible;
+    }
+
+    /* 6. 導覽列：可左右滑動，不擠壓按鈕 */
+    .coach-nav {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 8px;
+        width: 100%;
+        max-width: 100%;
+        padding: 10px 12px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+    }
+
+    .coach-nav-btn {
+        flex: 0 0 auto;
+        min-height: 40px;
+        padding: 10px 14px;
+        font-size: 14px;
+        white-space: nowrap;
+    }
+
+    .student-nav-btn {
+        flex: 0 0 auto;
+        min-height: 42px;
+        padding: 10px 12px;
+        font-size: 13px;
+        white-space: nowrap;
+    }
+
+    /* 7. 課程列表與今日行程 */
+    .lesson-item,
+    .today-item {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 10px;
+        min-width: 0;
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+
+    .lesson-loc {
+        flex: 1 1 100%;
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    /* 8. 首頁總覽與操作按鈕 */
+    .overview-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .overview-action-col {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding-top: 0;
+    }
+
+    .overview-action-col button {
+        flex: 1 1 140px;
+        min-height: 44px;
+        min-width: 0;
+    }
+
+    /* 9. 收入統計卡片 */
+    .income-summary-row {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .income-summary-card {
+        flex: 1 1 calc(50% - 10px);
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    /* 10. 年度切換與圖表 */
+    .year-switcher {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .chart-year-total {
+        flex: 1 1 100%;
+        margin-left: 0;
+    }
+
+    /* 11. 浮動操作按鈕 */
+    .floating-controls {
+        position: fixed;
+        right: max(12px, env(safe-area-inset-right));
+        bottom: max(12px, env(safe-area-inset-bottom));
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+        max-width: calc(100vw - 24px);
+        z-index: 100;
+    }
+
+    .floating-controls button {
+        min-height: 44px;
+        padding: 10px 14px;
+        font-size: 14px;
+        touch-action: manipulation;
+    }
+
+    /* 12. 彈窗：內容可捲動，按鈕固定在可視範圍 */
+    .modal-content {
+        box-sizing: border-box;
+        width: calc(100% - 24px);
+        max-width: 560px;
+        max-height: 88vh;
+        max-height: 88dvh;
+        margin: 4vh auto;
+        padding: 16px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-y: contain;
+    }
+
+    .modal-buttons {
+        position: sticky;
+        bottom: -1px;
+        z-index: 5;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 16px;
+        padding: 12px 0 4px;
+        background-color: #fefefe;
+    }
+
+    .modal-buttons button {
+        flex: 1 1 120px;
+        min-width: 0;
+        max-width: none;
+        min-height: 44px;
+        box-sizing: border-box;
+        touch-action: manipulation;
+    }
+
+    /* 13. 登入介面 */
+    .auth-box {
+        box-sizing: border-box;
+        width: calc(100% - 24px);
+        max-width: 100%;
+        padding: 24px 20px;
+    }
+
+    /* 14. 收入摘要：避免長文字撐破卡片 */
+    .income-summary-card,
+    .lesson-item,
+    .today-item,
+    .overview-action-col {
+        overflow-wrap: anywhere;
+    }
+}
+
+
+/* ========================================
+   小手機：480px 以下
+   ======================================== */
+
+@media (max-width: 480px) {
+
+    .main-wrapper {
+        gap: 12px;
+        padding: 8px;
+    }
+
+    .panel-inner {
+        padding: 12px;
+    }
+
+    .sidebar {
+        padding: 12px;
+    }
+
+    .calendar-header h3 {
+        font-size: 15px;
+    }
+
+    .day-header {
+        padding: 5px 2px;
+        font-size: 11px;
+    }
+
+    .student-nav-btn {
+        padding: 9px 10px;
+        font-size: 12px;
+    }
+
+    .coach-nav-btn {
+        padding: 9px 12px;
+        font-size: 13px;
+    }
+
+    .month-cell {
+        min-height: 44px;
+        font-size: 12px;
+    }
+
+    .income-summary-card {
+        flex-basis: calc(50% - 5px);
+    }
+
+    .modal-content {
+        width: calc(100% - 16px);
+        max-height: 90vh;
+        max-height: 90dvh;
+        margin: 2vh auto;
+        padding: 12px;
+    }
+
+    .modal-buttons button {
+        flex-basis: 100px;
+        font-size: 14px;
+    }
+
+    .floating-controls {
+        right: max(8px, env(safe-area-inset-right));
+        bottom: max(8px, env(safe-area-inset-bottom));
+        max-width: calc(100vw - 16px);
+    }
+
+    .floating-controls button {
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+
+    .auth-box {
+        padding: 22px 16px;
+    }
+}

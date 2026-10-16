@@ -197,7 +197,8 @@ if (forgotPasswordLink) {
 const logoutButtons = [
     document.getElementById('logout-btn'),
     document.getElementById('coach-top-logout-btn'),
-    document.getElementById('coach-sidebar-logout-btn')
+    document.getElementById('coach-sidebar-logout-btn'),
+    document.getElementById('student-logout-btn')   // ← 新增這行
 ].filter(Boolean);
 
 logoutButtons.forEach((logoutButton) => {
@@ -247,6 +248,9 @@ onAuthStateChanged(auth, async (user) => {
             if (sidebar) sidebar.style.display = 'flex';
 
             startLiveSync();
+            // 登入後主動切到「資訊總覽」，效果等同於教練自己點了一次該分頁按鈕
+            const homeBtn = document.querySelector('.coach-nav-btn[data-panel="panel-overview"]');
+            if (homeBtn) homeBtn.click();
             startCoachPaymentWatcher();
         } else {
             let studentName = '';
@@ -791,7 +795,13 @@ function startLiveSync() {
             window.updateCalendarUI(myEvents);
             renderStudentNextClassCard();
         }
-        
+
+        // 課表資料到了（或有變動）時，如果人正在總覽頁，就更新工時與收入
+        const overviewPanel = document.getElementById('panel-overview');
+        if (overviewPanel && overviewPanel.classList.contains('active')) {
+            renderOverviewStats();
+        }
+                
         // 📊 同步更新左側 Sidebar 的統計數據與時數
         if (window.updateStats) {
             window.updateStats();
@@ -1049,8 +1059,7 @@ navBtns.forEach((btn) => {
 
 // 學生端標籤頁切換
 document.addEventListener('DOMContentLoaded', () => {
-    const studentNavBtns = document.querySelectorAll('.student-nav-btn');
-    studentNavBtns.forEach((btn) => {
+        const studentNavBtns = document.querySelectorAll('.student-nav-btn[data-panel]');    studentNavBtns.forEach((btn) => {
         btn.addEventListener('click', () => {
             const targetPanelId = btn.dataset.panel;
             studentNavBtns.forEach((b) => b.classList.remove('active'));
@@ -1648,27 +1657,36 @@ function refreshStudentPaymentViews() {
 
 // 首頁「繳費情形」卡（以今天所在的月份為準）
 function updateHomePaymentCard() {
-    const el = document.getElementById('student-class-count');
-    if (!el) return;
-    const subEl = document.getElementById('student-class-count-sub');
-    const set = (text, color) => { el.innerText = text; el.style.color = color; };
-
     const now = new Date();
     const year = now.getFullYear();
     const monthIdx = now.getMonth();
     const key = payMonthKey(year, monthIdx);
-    const report = payStudentReports[key];
+
+    // 「本月預定費用」卡：大字是整月預定金額，小字是其中已上完的金額
+    const amountEl = document.getElementById('student-class-count');
+    const subEl = document.getElementById('student-class-count-sub');
+    const coursesReady = Array.isArray(window.courses);
     const { amount, completedAmount } = payComputeAmount(year, monthIdx);
 
+    if (amountEl) {
+        amountEl.innerText = coursesReady ? `$${amount.toLocaleString()}` : '—';
+        amountEl.style.color = '';   // 清掉之前狀態文字留下的紅／綠色
+    }
     if (subEl) {
-        subEl.innerText = amount > 0
-            ? `本月預定 $${amount.toLocaleString()}（已上完 $${completedAmount.toLocaleString()}）`
+        subEl.innerText = coursesReady && amount > 0
+            ? `已上完 $${completedAmount.toLocaleString()}`
             : '';
     }
 
+    // 「本月繳費情形」卡：狀態文字改寫到自己的元素
+    const statusEl = document.getElementById('student-payment-status');
+    if (!statusEl) return;
+    const set = (text, color) => { statusEl.innerText = text; statusEl.style.color = color; };
+    const report = payStudentReports[key];
+
     if (payStudentPaidMonths[key] === true) { set('已繳費', '#2e7d32'); return; }
     if (report && report.status === 'reported') { set('已回報，待確認', '#e67e22'); return; }
-    if (Array.isArray(window.courses) && amount <= 0) { set('本月無費用', '#7f8c8d'); return; }
+    if (coursesReady && amount <= 0) { set('本月無費用', '#7f8c8d'); return; }
     set('未繳費', '#d32f2f');
 }
 
@@ -1784,7 +1802,7 @@ function renderStudentPayPanel() {
     if (nextBtn) nextBtn.disabled = curNum >= maxNum;
 
     const { amount, minutes, completedAmount, pendingAmount } = payComputeAmount(payYear, payMonthIdx);
-payCurrentAmount = amount;
+    payCurrentAmount = amount;
 
     const amountEl = document.getElementById('pay-amount');
     const hoursEl = document.getElementById('pay-hours');
