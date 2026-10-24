@@ -1069,21 +1069,12 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 }
 
 
-.income-student-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    flex-wrap: nowrap;
-    width: 100%;
-}
-
-
 .income-paid-checkbox {
-    display: flex;
-    align-items: flex-end;
-    gap: 6px;
-    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .income-paid-checkbox input[type="checkbox"] {
@@ -1099,14 +1090,6 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     white-space: nowrap;
 }
 
-.income-student-row .db-name {
-    display: flex;
-    flex: 1;
-}
-
-.income-student-row .db-meta {
-    white-space: nowrap;
-}
 
 .income-student-row.is-paid {
     opacity: 0.6;
@@ -2495,4 +2478,144 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     .auth-box {
         padding: 22px 16px;
     }
+}
+
+.data-start-note {
+    margin: 16px 0 0;
+    font-size: 12px;
+    color: #9aa5ab;
+    text-align: right;
+}
+
+.history-start-note {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #90a4ae;
+}
+
+/* 收入折線圖 */
+.income-trend-card {
+    background: #fff;
+    border: 1px solid #eaedf1;
+    border-radius: 12px;
+    padding: 20px 16px;
+    margin-top: 24px;
+}
+
+.income-trend-card .panel-subtitle { margin-top: 16px; }
+
+.trend-range-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+
+.trend-range-btn {
+    min-height: 40px;
+    padding: 8px 16px;
+    border: 1px solid #cfd8dc;
+    border-radius: 20px;
+    background: #fff;
+    color: #546e7a;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.trend-range-btn.active { background: #2c3e50; border-color: #2c3e50; color: #fff; }
+
+.trend-summary { margin: 0 0 8px; font-size: 14px; color: #2c3e50; }
+.trend-paid { color: #2e7d32; font-weight: 600; }
+.trend-pending { color: #e65100; font-weight: 600; }
+
+.trend-chart-wrap { position: relative; }
+.trend-chart-wrap svg { display: block; width: 100%; height: auto; }
+
+.trend-dot { fill: #fff; stroke: #4db6ac; stroke-width: 2.5; transition: fill 0.15s; }
+.trend-dot.active { fill: #4db6ac; }
+.trend-hit { fill: transparent; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+
+.trend-tooltip {
+    position: absolute;
+    z-index: 5;
+    min-width: 150px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #263238;
+    color: #fff;
+    font-size: 13px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    pointer-events: none;   /* 提示框不擋滑鼠，避免一碰到就閃爍 */
+}
+
+.trend-tooltip .trend-paid { color: #a5d6a7; }
+.trend-tooltip .trend-pending { color: #ffcc80; }
+.trend-tip-title { margin-bottom: 6px; font-weight: 700; }
+.trend-tip-row { display: flex; justify-content: space-between; gap: 16px; padding: 2px 0; }
+
+.trend-hint { margin: 8px 0 0; font-size: 12px; color: #9aa5ab; text-align: center; }
+
+/* 財務報表：月份切換列 */
+.income-month-switcher {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.income-month-switcher button {
+    min-width: 40px;
+    min-height: 40px;
+    border: none;
+    border-radius: 8px;
+    background: #f0f2f5;
+    color: #2c3e50;
+    cursor: pointer;
+}
+
+.income-month-switcher button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+#income-month-label { font-weight: 700; font-size: 18px; color: #2c3e50; }
+
+/* 學生收款資料列 */
+.db-row.income-student-row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+/* 收款狀態 */
+.db-row.income-student-row .income-paid-checkbox {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 5px;
+    width: auto;
+    margin: 0;
+    white-space: nowrap;
+}
+
+/* 學生姓名：填滿剩餘空間 */
+.db-row.income-student-row .db-name {
+    display: block;
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 上課時間與金額 */
+.db-row.income-student-row .db-meta {
+    display: inline-block;
+    flex: 0 0 auto;
+    width: auto;
+    margin: 0;
+    white-space: nowrap;
+}
+
+/* 報帳標籤 */
+.db-row.income-student-row > :last-child {
+    flex: 0 0 auto;
 }

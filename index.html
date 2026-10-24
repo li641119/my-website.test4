@@ -298,13 +298,18 @@
             <!--財務報表，尚未完成輸入年月份查詢的功能-->
             <div class="coach-panel" id="panel-income" data-panel-id="panel-income">
                 <div class="panel-inner">
+                    <div class="income-month-switcher">
+                        <button type="button" id="income-month-prev" onclick="changeIncomeMonth(-1)">◀</button>
+                        <span id="income-month-label"></span>
+                        <button type="button" id="income-month-next" onclick="changeIncomeMonth(1)">▶</button>
+                    </div>
                     <div class="income-summary-row">
                         <div class= "income-summary-card">
-                            <span class="label">本月總時數</span>
+                            <span class="label">預定時數</span>
                             <span class="value" id="income-panel-total-hours">0</span>
                         </div>
                         <div class= "income-summary-card">
-                            <span class="label">本月總收入</span>
+                            <span class="label">預定收入</span>
                             <span class="value" id="income-panel-total-income">0</span>
                         </div>
                         <div class= "income-summary-card income-paid-card">
@@ -318,6 +323,7 @@
                     </div>
                     
                     <div class="income-analysis-row">
+
                         <!-- 左邊：依學生分項 -->
                         <div class="income-breakdown-section">
                             <h3 class="panel-subtitle">依學生分項</h3>
@@ -334,15 +340,23 @@
                         </div>
                         <!-- 右邊: 收入折線圖 -->
                         <div class="income-breakdown-section">
-                            <div class="income-chart-header">
-                                <h3 class="panel-subtitle">收入折線圖</h3>
-                                <div class="income-chart-controls">
-                                    <button type="button" class="add-student-btn" id="income-year-btn">年份</button>
-                                    <button type="button" class="add-student-btn" id="income-month-btn">月份</button>
-                                    <button type="button" class="add-student-btn" id="income-chart-search-btn">查詢</button>
+                            <h3 class="panel-subtitle">📈 收入折線圖</h3>
+
+                            <div class="income-trend-card">
+                                <div class="trend-range-buttons">
+                                    <button type="button" class="trend-range-btn active" data-range="6m">近 6 個月</button>
+                                    <button type="button" class="trend-range-btn" data-range="12m">近 1 年</button>
+                                    <button type="button" class="trend-range-btn" data-range="ytd">今年累計</button>
                                 </div>
+                                <p id="income-trend-summary" class="trend-summary"></p>
+                                <div id="income-trend-wrap" class="trend-chart-wrap">
+                                    <div id="income-trend-chart"></div>
+                                    <div id="income-trend-tooltip" class="trend-tooltip hide"></div>
+                                </div>
+                                <p class="trend-hint">滑鼠移到（手機點一下）圓點，可看該月收入明細，資料自 2026 年 10 月起算</p>
                             </div>
                         </div>
+
                     </div>
                 </div>
             </div>

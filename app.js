@@ -252,6 +252,7 @@ onAuthStateChanged(auth, async (user) => {
             const homeBtn = document.querySelector('.coach-nav-btn[data-panel="panel-overview"]');
             if (homeBtn) homeBtn.click();
             startCoachPaymentWatcher();
+            startIncomeRecordsWatcher();
         } else {
             let studentName = '';
             try {
@@ -296,6 +297,7 @@ onAuthStateChanged(auth, async (user) => {
         if (unsubscribe) unsubscribe();
         stopCoachPaymentWatcher();
         stopStudentPaymentWatchers();
+        stopIncomeRecordsWatcher();
     }
 });
 
@@ -1104,9 +1106,23 @@ window.queryMyHistory = function () {
         return;
     }
 
-    const s = window.getStudentPeriodSummary(currentUser.name, startVal, endVal);
+    const floor = window.STUDENT_DATA_START || '';
+    const label = window.studentDataStartLabel ? window.studentDataStartLabel() : '';
+
+    if (floor && endVal < floor) {
+        resultEl.innerText = `資料自 ${label}起算，這段期間沒有資料`;
+        return;
+    }
+
+    const effectiveStart = (floor && startVal < floor) ? floor : startVal;
+    const clamped = effectiveStart !== startVal;
+    const noteHtml = clamped
+        ? `<div class="history-start-note">資料自 ${label}起算，已從 ${floor.replace(/-/g, '/')} 開始計算</div>`
+        : '';
+
+    const s = window.getStudentPeriodSummary(currentUser.name, effectiveStart, endVal);
     if (s.scheduled.count === 0) {
-        resultEl.innerText = '這段期間查無上課紀錄';
+        resultEl.innerHTML = `這段期間查無上課紀錄${noteHtml}`;
         return;
     }
 
@@ -1115,7 +1131,8 @@ window.queryMyHistory = function () {
 
     resultEl.innerHTML = `
         <div class="history-result-row"><span class="history-tag history-tag-done">已上完</span>${fmt(s.completed)}</div>
-        <div class="history-result-row"><span class="history-tag history-tag-sched">預定（含已上完）</span>${fmt(s.scheduled)}</div>`;
+        <div class="history-result-row"><span class="history-tag history-tag-sched">預定（含已上完）</span>${fmt(s.scheduled)}</div>
+        ${noteHtml}`;
 };
 
 window.renderCoachOverview = function () {
@@ -1347,6 +1364,54 @@ window.renderCoachOverview = function () {
 
 };
 
+// 學生端：只在整個學生區塊的最底下放一行起算提示（不放進任何分頁裡，避免影響各頁版面），
+// 並限制日期框最早只能選到起算日
+document.addEventListener('DOMContentLoaded', () => {
+    const label = typeof window.studentDataStartLabel === 'function' ? window.studentDataStartLabel() : '';
+    if (!label) return;
+
+    const studentView = document.getElementById('student-view');
+    if (studentView) {
+        const note = document.createElement('p');
+        note.className = 'data-start-note';
+        note.innerText = `資料自 ${label}起算`;
+        studentView.appendChild(note);
+    }
+
+    const floor = window.STUDENT_DATA_START;
+    ['student-history-start', 'student-history-end'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el && floor) el.min = floor;
+    });
+});
+
+// 教練端：監聽所有「已收款」紀錄，給收入折線圖拆分每月已收款／待收款
+let incomeRecordsUnsub = null;
+window.incomePaidMap = {};
+
+function startIncomeRecordsWatcher() {
+    stopIncomeRecordsWatcher();
+    incomeRecordsUnsub = onSnapshot(collection(db, 'incomeRecords'), (snap) => {
+        const map = {};
+        snap.forEach((d) => {
+            const x = d.data();
+            if (x.studentName && x.year && x.month) {
+                map[`${x.year}-${x.month}-${x.studentName}`] = x.isPaid === true;
+            }
+        });
+        window.incomePaidMap = map;
+
+        const panel = document.getElementById('panel-income');
+        if (panel && panel.classList.contains('active') && typeof window.renderIncomePanel === 'function') {
+            window.renderIncomePanel();
+        }
+    }, (err) => console.error('監聽收款紀錄失敗:', err));
+}
+
+function stopIncomeRecordsWatcher() {
+    if (incomeRecordsUnsub) { incomeRecordsUnsub(); incomeRecordsUnsub = null; }
+    window.incomePaidMap = {};
+}
 
 console.log("Firebase 監聽器已啟動");
 
@@ -1699,6 +1764,16 @@ function payEarliestMonthNumber() {
         const m = parseInt(c.date.slice(5, 7), 10) - 1;
         if (Number.isFinite(y) && Number.isFinite(m)) min = Math.min(min, payMonthNumber(y, m));
     });
+
+    // 學生端資料起算點：不能切到更早的月份
+    const startStr = window.STUDENT_DATA_START;
+    if (startStr) {
+        const startNum = payMonthNumber(
+            parseInt(startStr.slice(0, 4), 10),
+            parseInt(startStr.slice(5, 7), 10) - 1
+        );
+        min = Math.max(min, startNum);
+    }
     return min;
 }
 

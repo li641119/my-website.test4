@@ -1,5 +1,27 @@
 // --- 全域變數 ---
 import { currentUser } from './app.js';
+// 教練端財務資料起算點：財務報表的月份切換、收入折線圖共用
+const FINANCE_DATA_START = '2026-10-01';
+const FINANCE_START_YEAR = parseInt(FINANCE_DATA_START.slice(0, 4), 10);
+const FINANCE_START_MONTH_IDX = parseInt(FINANCE_DATA_START.slice(5, 7), 10) - 1;
+
+// 財務報表目前選的月份（獨立於行事曆翻到哪一週）
+let incomePanelYear = new Date().getFullYear();
+let incomePanelMonth = new Date().getMonth();
+// 學生端資料起算點：這個日期之前的課程，學生端所有畫面都不顯示、不計算。
+// 教練端不受影響。
+const STUDENT_DATA_START = '2026-10-01';
+const STUDENT_START_YEAR = parseInt(STUDENT_DATA_START.slice(0, 4), 10);
+const STUDENT_START_MONTH_IDX = parseInt(STUDENT_DATA_START.slice(5, 7), 10) - 1;
+window.STUDENT_DATA_START = STUDENT_DATA_START;
+window.studentDataStartLabel = () => `${STUDENT_START_YEAR} 年 ${STUDENT_START_MONTH_IDX + 1} 月`;
+
+// 把查詢區間裁到起算點之後；整段都在起算點之前就回傳 null
+function clampToStudentStart(startStr, endStr) {
+    const start = startStr < STUDENT_DATA_START ? STUDENT_DATA_START : startStr;
+    return start > endStr ? null : { start, end: endStr };
+}
+
 let courses = [];
 let viewDate = new Date(); 
 let editingId = null; // 【編輯功能關鍵】用於追蹤正在編輯的行程 ID
@@ -653,15 +675,129 @@ window.updateStats = function() {
 }
 
 
-let incomePaidCache = {};
-
-let incomePaidCacheYear = null;
-let incomePaidCacheMonth = null;
-
-
-// 取得目前月份的收款狀態
+// 已收款狀態改讀 app.js 即時監聽的 window.incomePaidMap（month 是 JS 的 0~11）
 function getIncomePaidStatus(year, month, studentName) {
-    return incomePaidCache[studentName] === true;
+    const map = window.incomePaidMap || {};
+    return map[`${year}-${month + 1}-${studentName}`] === true;
+}
+
+// 把財務報表月份限制在「起算月 ~ 本月」之間，回傳目前位置與邊界
+function clampIncomeMonth() {
+    const now = new Date();
+    const maxNum = now.getFullYear() * 12 + now.getMonth();
+    const minNum = Math.min(FINANCE_START_YEAR * 12 + FINANCE_START_MONTH_IDX, maxNum);
+    const cur = Math.max(minNum, Math.min(maxNum, incomePanelYear * 12 + incomePanelMonth));
+    incomePanelYear = Math.floor(cur / 12);
+    incomePanelMonth = cur % 12;
+    return { cur, minNum, maxNum };
+}
+
+window.changeIncomeMonth = function (direction) {
+    const { cur } = clampIncomeMonth();
+    const next = cur + direction;
+    incomePanelYear = Math.floor(next / 12);
+    incomePanelMonth = next % 12;
+    renderIncomePanel();
+};
+
+// 勾選「已收款」：寫入的是財務報表目前選的月份，不是行事曆翻到的月份
+window.toggleIncomePaid = async function (studentName, checked) {
+    if (typeof window.setIncomePaidStatus !== 'function') {
+        console.error('❌ 找不到 window.setIncomePaidStatus');
+        return;
+    }
+    const success = await window.setIncomePaidStatus(incomePanelYear, incomePanelMonth, studentName, checked);
+    if (!success) {
+        alert('收款紀錄儲存失敗，請檢查網路連線後再試一次。');
+        renderIncomePanel();   // 還原勾選框
+    }
+};
+
+export function renderIncomePanel() {
+    renderIncomeTrend();   // 折線圖有自己的月份範圍，不受下面的月份切換影響
+
+    const { cur, minNum, maxNum } = clampIncomeMonth();
+    const year = incomePanelYear;
+    const month = incomePanelMonth;
+
+    const labelEl = document.getElementById('income-month-label');
+    if (labelEl) labelEl.innerText = `${year} 年 ${month + 1} 月`;
+    const prevBtn = document.getElementById('income-month-prev');
+    const nextBtn = document.getElementById('income-month-next');
+    if (prevBtn) prevBtn.disabled = cur <= minNum;
+    if (nextBtn) nextBtn.disabled = cur >= maxNum;
+
+    const setText = (id, text) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = text;
+    };
+
+    const monthData = calculateMonthlyData(year, month);
+    setText('income-panel-total-hours', `${(monthData.totalMinutes / 60).toFixed(1)} 小時`);
+    setText('income-panel-total-income', `$${Math.round(monthData.totalIncome).toLocaleString()}`);
+
+    const breakdownEl = document.getElementById('income-panel-breakdown');
+    if (!breakdownEl) return;
+
+    const entries = Object.entries(monthData.studentStats).sort((a, b) => b[1].money - a[1].money);
+
+    if (entries.length === 0) {
+        breakdownEl.innerHTML = '<p class="no-data-hint">這個月沒有教球紀錄</p>';
+        setText('income-panel-paid-income', '$0');
+        setText('income-panel-pending-income', '$0');
+        return;
+    }
+
+    let paidIncome = 0;
+    let pendingIncome = 0;
+    entries.forEach(([name, data]) => {
+        if (getIncomePaidStatus(year, month, name)) paidIncome += data.money;
+        else pendingIncome += data.money;
+    });
+    setText('income-panel-paid-income', `$${Math.round(paidIncome).toLocaleString()}`);
+    setText('income-panel-pending-income', `$${Math.round(pendingIncome).toLocaleString()}`);
+
+    breakdownEl.innerHTML = entries.map(([name, data]) => {
+        const isPaid = getIncomePaidStatus(year, month, name);
+        const report = typeof window.getPaymentReport === 'function'
+            ? window.getPaymentReport(year, month, name)
+            : null;
+        // 優先順序：已收款 > 學生已轉帳 > 待收款
+        const isReported = !isPaid && !!report && report.status === 'reported';
+
+        const safeName = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const money = Math.round(data.money);
+
+        let reportTag = '';
+        if (isReported) {
+            const reportAmount = Number(report.amount) || 0;
+            const last5 = String(report.last5 || '').replace(/[^0-9]/g, '');
+            const timeText = window.payFormatTime ? window.payFormatTime(report.reportedAt) : '';
+            const warn = reportAmount !== money
+                ? `<span class="income-report-warn">⚠️ 與目前應收 $${money.toLocaleString()} 不同</span>`
+                : '';
+            reportTag = `
+                <div class="income-report-tag">
+                    <span class="income-report-badge">學生已轉帳</span>
+                    <span>$${reportAmount.toLocaleString()}｜後五碼 ${last5}｜${timeText}</span>
+                    ${warn}
+                    <button type="button" class="cancel-report-btn"
+                        onclick="cancelPaymentReport(${year}, ${month}, '${safeName}')">取消回報</button>
+                </div>`;
+        }
+
+        return `
+            <div class="db-row income-student-row ${isPaid ? 'is-paid' : ''} ${isReported ? 'is-reported' : ''}">
+                <label class="income-paid-checkbox">
+                    <input type="checkbox" ${isPaid ? 'checked' : ''}
+                        onchange="toggleIncomePaid('${safeName}', this.checked)">
+                    <span>已收款</span>
+                </label>
+                <span class="db-name">${name}</span>
+                <span class="db-meta">${(data.mins / 60).toFixed(1)} 小時 · $${money.toLocaleString()}</span>
+                ${reportTag}
+            </div>`;
+    }).join('');
 }
 
 
@@ -704,208 +840,6 @@ async function loadIncomePaidStatusForMonth(year, month) {
 
         incomePaidCache = {};
     }
-}
-
-
-// 勾選「已收款」時
-window.toggleIncomePaid = async function (
-    studentName,
-    checked
-) {
-
-    const year = viewDate.getFullYear();
-    const month = viewDate.getMonth();
-
-    // 先更新畫面
-    incomePaidCache[studentName] = checked;
-
-    renderIncomePanel();
-
-    // 寫入 Firebase
-    if (typeof window.setIncomePaidStatus !== 'function') {
-        console.error('❌ 找不到 window.setIncomePaidStatus');
-        return;
-    }
-
-    const success =
-        await window.setIncomePaidStatus(
-            year,
-            month,
-            studentName,
-            checked
-        );
-
-    // 如果 Firebase 寫入失敗
-    if (!success) {
-
-        // 還原原本狀態
-        incomePaidCache[studentName] = !checked;
-
-        renderIncomePanel();
-
-        alert(
-            '收款紀錄儲存失敗，請檢查網路連線後再試一次。'
-        );
-    }
-};
-
-export async function renderIncomePanel() {
-
-    const year = viewDate.getFullYear();
-    const month = viewDate.getMonth();
-
-    const monthData =
-        calculateMonthlyData(year, month);
-
-    const hoursEl =
-        document.getElementById(
-            'income-panel-total-hours'
-        );
-
-    if (hoursEl) {
-        hoursEl.innerText =
-            `${(monthData.totalMinutes / 60).toFixed(1)} 小時`;
-    }
-
-
-    const incomeEl =
-        document.getElementById(
-            'income-panel-total-income'
-        );
-
-    if (incomeEl) {
-        incomeEl.innerText =
-            `$${Math.round(monthData.totalIncome).toLocaleString()}`;
-    }
-
-
-    const breakdownEl =
-        document.getElementById(
-            'income-panel-breakdown'
-        );
-
-    if (!breakdownEl) return;
-
-
-    const entries =
-        Object.entries(monthData.studentStats)
-        .sort(
-            (a, b) =>
-                b[1].money - a[1].money
-        );
-
-    if (entries.length === 0) {
-
-        breakdownEl.innerHTML =
-            '<p class="no-data-hint">本月尚無教球紀錄</p>';
-
-        const paidEl =
-            document.getElementById(
-                'income-panel-paid-income'
-            );
-
-        const pendingEl =
-            document.getElementById(
-                'income-panel-pending-income'
-            );
-
-        if (paidEl) paidEl.innerText = '$0';
-        if (pendingEl) pendingEl.innerText = '$0';
-
-        return;
-    }
-
-
-    await loadIncomePaidStatusForMonth(
-        year,
-        month
-    );
-
-    let paidIncome = 0;
-    let pendingIncome = 0;
-
-    entries.forEach(
-        ([name, data]) => {
-
-            const isPaid =
-                getIncomePaidStatus(
-                    year,
-                    month,
-                    name
-                );
-
-            if (isPaid) {
-                paidIncome += data.money;
-            } else {
-                pendingIncome += data.money;
-            }
-        }
-    );
-
-    const paidIncomeEl =
-        document.getElementById(
-            'income-panel-paid-income'
-        );
-
-    if (paidIncomeEl) {
-        paidIncomeEl.innerText =
-            `$${Math.round(paidIncome).toLocaleString()}`;
-    }
-
-
-    const pendingIncomeEl =
-        document.getElementById(
-            'income-panel-pending-income'
-        );
-
-    if (pendingIncomeEl) {
-        pendingIncomeEl.innerText =
-            `$${Math.round(pendingIncome).toLocaleString()}`;
-    }
-
-        breakdownEl.innerHTML = entries.map(([name, data]) => {
-        const isPaid = getIncomePaidStatus(year, month, name);
-        const report = typeof window.getPaymentReport === 'function'
-            ? window.getPaymentReport(year, month, name)
-            : null;
-        // 優先順序：已收款 > 學生已轉帳 > 待收款
-        const isReported = !isPaid && !!report && report.status === 'reported';
-
-        // 避免學生姓名裡的特殊字元破壞 onclick
-        const safeName = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        const money = Math.round(data.money);
-
-        let reportTag = '';
-        if (isReported) {
-            const reportAmount = Number(report.amount) || 0;
-            const last5 = String(report.last5 || '').replace(/[^0-9]/g, '');
-            const timeText = window.payFormatTime ? window.payFormatTime(report.reportedAt) : '';
-            const warn = reportAmount !== money
-                ? `<span class="income-report-warn">⚠️ 與目前應收 $${money.toLocaleString()} 不同</span>`
-                : '';
-            reportTag = `
-                <div class="income-report-tag">
-                    <span class="income-report-badge">學生已轉帳</span>
-                    <span>$${reportAmount.toLocaleString()}｜後五碼 ${last5}｜${timeText}</span>
-                    ${warn}
-                    <button type="button" class="cancel-report-btn"
-                        onclick="cancelPaymentReport(${year}, ${month}, '${safeName}')">取消回報</button>
-                </div>`;
-        }
-
-        return `
-            <div class="db-row income-student-row ${isPaid ? 'is-paid' : ''} ${isReported ? 'is-reported' : ''}">
-                <label class="income-paid-checkbox">
-                    <input type="checkbox" ${isPaid ? 'checked' : ''}
-                        onchange="toggleIncomePaid('${safeName}', this.checked)">
-                    <span>已收款</span>
-                    <span class="db-name">${name}</span>
-                    <span class="db-meta">${(data.mins / 60).toFixed(1)} 小時 · $${money.toLocaleString()}</span>
-                </label>
-                
-                ${reportTag}
-            </div>`;
-    }).join('');
 }
 
 // 保留給 app.js / HTML 導覽列使用
@@ -1232,6 +1166,10 @@ export function renderAll() {
         }
         if (!isStudent) {
             renderTodaySchedule();
+            const incomePanel = document.getElementById('panel-income');
+            if (incomePanel && incomePanel.classList.contains('active')) {
+                renderIncomePanel();
+            }
         }
     } catch (error) {
         console.error("❌ renderAll 執行失敗:", error);
@@ -1354,6 +1292,7 @@ window.updateStudentColor = updateStudentColor;
 let studentCalendarDate = new Date();
 
 function isWorkDayForStudent(studentName, course, dStr) {
+    if (dStr < STUDENT_DATA_START) return false;
     if (!course || course.type !== 'work' || course.name !== studentName) return false;
     return courseOccursOnDate(course, dStr);
 }
@@ -1380,7 +1319,14 @@ function findNextClassForStudentHome(studentName) {
 window.findNextClassForStudentHome = findNextClassForStudentHome;
 
 window.changeStudentMonth = function (direction) {
-    studentCalendarDate.setMonth(studentCalendarDate.getMonth() + direction);
+    const target = new Date(
+        studentCalendarDate.getFullYear(),
+        studentCalendarDate.getMonth() + direction,
+        1
+    );
+    const minDate = new Date(STUDENT_START_YEAR, STUDENT_START_MONTH_IDX, 1);
+    if (target < minDate) return;
+    studentCalendarDate = target;
     renderStudentMonthCalendar();
 };
 
@@ -1389,9 +1335,16 @@ function renderStudentMonthCalendar() {
     const labelEl = document.getElementById('student-month-label');
     if (!gridEl || !currentUser || !currentUser.name) return;
 
+    const minMonthNum = STUDENT_START_YEAR * 12 + STUDENT_START_MONTH_IDX;
+    if (studentCalendarDate.getFullYear() * 12 + studentCalendarDate.getMonth() < minMonthNum) {
+        studentCalendarDate = new Date(STUDENT_START_YEAR, STUDENT_START_MONTH_IDX, 1);
+    }
+
     const year = studentCalendarDate.getFullYear();
     const month = studentCalendarDate.getMonth();
     if (labelEl) labelEl.innerText = `${year}年 ${month + 1}月`;
+    const prevMonthBtn = document.querySelector('#panel-student-calendar .month-calendar-header button');
+    if (prevMonthBtn) prevMonthBtn.disabled = (year * 12 + month) <= minMonthNum;
 
     const firstDay = new Date(year, month, 1);
     const startOffset = firstDay.getDay();
@@ -1552,8 +1505,10 @@ function getEarliestLessonYear(studentName) {
 
 function getMonthlyHoursForYear(studentName, year) {
     const hours = new Array(12).fill(0);
-    const lessons = getStudentLessonDetails(studentName, `${year}-01-01`, `${year}-12-31`);
-    lessons.forEach(l => {
+    const range = clampToStudentStart(`${year}-01-01`, `${year}-12-31`);
+    if (!range) return hours;
+
+    getStudentLessonDetails(studentName, range.start, range.end).forEach(l => {
         if (!l.completed) return;
         const monthIdx = parseInt(l.dateStr.slice(5, 7), 10) - 1;
         hours[monthIdx] += l.minutes / 60;
@@ -1578,9 +1533,9 @@ function renderProgressChart() {
     const name = currentUser.name;
     const now = new Date();
     const nowYear = now.getFullYear();
-    const earliest = Math.min(getEarliestLessonYear(name), nowYear);
+    // 年份範圍：起算年 ~ 今年，也不早於這位學生最早有課的那一年
+    const earliest = Math.max(STUDENT_START_YEAR, Math.min(getEarliestLessonYear(name), nowYear));
 
-    // 年份只能在「最早有課的那年」到「今年」之間切換
     if (chartYear > nowYear) chartYear = nowYear;
     if (chartYear < earliest) chartYear = earliest;
 
@@ -1591,11 +1546,13 @@ function renderProgressChart() {
     if (prevBtn) prevBtn.disabled = chartYear <= earliest;
     if (nextBtn) nextBtn.disabled = chartYear >= nowYear;
 
-    // 今年只畫到目前這個月，之後的月份還沒有已上完的課，不畫點
+    // 畫圖的月份範圍：起算年只從起算月開始，今年只畫到目前這個月
+    const firstIdx = chartYear === STUDENT_START_YEAR ? STUDENT_START_MONTH_IDX : 0;
     const lastIdx = chartYear === nowYear ? now.getMonth() : 11;
     const plotted = getMonthlyHoursForYear(name, chartYear).slice(0, lastIdx + 1);
-    const total = plotted.reduce((sum, h) => sum + h, 0);
-    const hasData = plotted.some(h => h > 0);
+    const visible = plotted.slice(firstIdx);
+    const total = visible.reduce((sum, h) => sum + h, 0);
+    const hasData = visible.some(h => h > 0);
 
     const totalEl = document.getElementById('chart-year-total');
     if (totalEl) {
@@ -1610,36 +1567,39 @@ function renderProgressChart() {
     const plotH = H - T - B;
     const xStep = (plotW - PAD * 2) / 11;
     const xAt = i => L + PAD + i * xStep;
-    const { step, max } = niceChartScale(Math.max(...plotted, 0));
+    const { step, max } = niceChartScale(Math.max(...visible, 0));
     const yAt = v => T + plotH - (v / max) * plotH;
 
     let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${chartYear} 年每月上課時數折線圖">`;
 
-    // 水平格線與縱軸刻度
     for (let v = 0; v <= max; v += step) {
         const y = yAt(v);
         svg += `<line x1="${L}" y1="${y}" x2="${L + plotW}" y2="${y}" stroke="${v === 0 ? '#b0bec5' : '#eceff1'}" stroke-width="1"/>`;
         svg += `<text x="${L - 8}" y="${y + 4}" text-anchor="end" font-size="12" fill="#7f8c8d">${v}</text>`;
     }
 
-    // 軸單位與橫軸月份
     svg += `<text x="4" y="14" font-size="12" fill="#7f8c8d">小時</text>`;
     svg += `<text x="${W - 4}" y="${T + plotH + 22}" text-anchor="end" font-size="12" fill="#7f8c8d">月</text>`;
     for (let i = 0; i < 12; i++) {
-        svg += `<text x="${xAt(i)}" y="${T + plotH + 22}" text-anchor="middle" font-size="12" fill="#7f8c8d">${i + 1}</text>`;
+        const color = i < firstIdx ? '#cfd8dc' : '#7f8c8d';   // 起算月以前的月份淺灰
+        svg += `<text x="${xAt(i)}" y="${T + plotH + 22}" text-anchor="middle" font-size="12" fill="${color}">${i + 1}</text>`;
     }
 
     if (hasData) {
-        const pts = plotted.map((h, i) => `${xAt(i).toFixed(1)},${yAt(h).toFixed(1)}`).join(' ');
+        const pts = plotted
+            .map((h, i) => (i >= firstIdx ? `${xAt(i).toFixed(1)},${yAt(h).toFixed(1)}` : null))
+            .filter(Boolean)
+            .join(' ');
         svg += `<polyline points="${pts}" fill="none" stroke="#4db6ac" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
         plotted.forEach((h, i) => {
+            if (i < firstIdx) return;
             const x = xAt(i).toFixed(1);
             const y = yAt(h);
             svg += `<circle cx="${x}" cy="${y.toFixed(1)}" r="4.5" fill="#fff" stroke="#4db6ac" stroke-width="2.5"/>`;
             svg += `<text x="${x}" y="${(y - 10).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="700" fill="#2c3e50">${Number(h.toFixed(1))}</text>`;
         });
     } else {
-        svg += `<text x="${L + plotW / 2}" y="${T + plotH / 2}" text-anchor="middle" font-size="14" fill="#95a5a6">這一年沒有上課紀錄</text>`;
+        svg += `<text x="${L + plotW / 2}" y="${T + plotH / 2}" text-anchor="middle" font-size="14" fill="#95a5a6">這段期間沒有上課紀錄</text>`;
     }
 
     svg += `</svg>`;
@@ -1664,7 +1624,8 @@ function formatHours(minutes) {
 window.formatHours = formatHours;
 
 function getStudentPeriodSummary(studentName, startStr, endStr) {
-    const lessons = getStudentLessonDetails(studentName, startStr, endStr);
+    const range = clampToStudentStart(startStr, endStr);
+    const lessons = range ? getStudentLessonDetails(studentName, range.start, range.end) : [];
     const blank = () => ({ count: 0, minutes: 0, money: 0 });
     const completed = blank();
     const scheduled = blank();
@@ -1705,3 +1666,224 @@ function renderStudentHomeSummary() {
     if (hoursEl) hoursEl.innerText = `${formatHours(s.completed.minutes)} 小時`;
     if (subEl) subEl.innerText = `本月預定 ${formatHours(s.scheduled.minutes)} 小時`;
 }
+
+// ------------------------------------------------------------
+// 教練端：收入折線圖（近 6 個月／近 1 年／今年累計）
+// 每月金額用 calculateMonthlyData（跟財務報表「本月預定收入」同一套）；
+// 已收款 = 該月已被勾選「已收款」的學生的預定收入加總，待收款 = 預定 − 已收款。
+// ------------------------------------------------------------
+let trendRange = '6m';
+let trendData = [];
+let trendGeom = { xs: [], ys: [] };
+let trendActiveIndex = null;
+let trendLastPointer = 'mouse';
+
+const TREND_W = 480, TREND_H = 270;
+const TREND_L = 58, TREND_R = 14, TREND_T = 30, TREND_B = 46, TREND_PAD = 14;
+
+// 金額專用的刻度（1、2、5 × 10 的次方），學生端那個是給小時數用的，不適合幾萬元的數字
+function niceMoneyScale(maxVal) {
+    if (!(maxVal > 0)) return { step: 1000, max: 4000 };
+    const rough = maxVal / 4;
+    const pow = Math.pow(10, Math.floor(Math.log10(rough)));
+    const norm = rough / pow;
+    const mult = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
+    const step = mult * pow;
+    return { step, max: Math.ceil(maxVal / step) * step };
+}
+
+function trendMoney(v) {
+    return `$${Math.round(v).toLocaleString()}`;
+}
+
+function getTrendMonthList(range) {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const count = range === '12m' ? 12 : range === 'ytd' ? m + 1 : 6;
+    const startNum = FINANCE_START_YEAR * 12 + FINANCE_START_MONTH_IDX;
+    const list = [];
+    for (let i = count - 1; i >= 0; i--) {
+        const d = new Date(y, m - i, 1);
+        if (d.getFullYear() * 12 + d.getMonth() < startNum) continue;   // 起算月以前不畫
+        list.push({ year: d.getFullYear(), monthIdx: d.getMonth() });
+    }
+    return list;
+}
+
+function computeTrendData(range) {
+    const paidMap = window.incomePaidMap || {};
+    return getTrendMonthList(range).map(({ year, monthIdx }) => {
+        const data = calculateMonthlyData(year, monthIdx);
+        let paid = 0;
+        Object.entries(data.studentStats).forEach(([name, s]) => {
+            if (paidMap[`${year}-${monthIdx + 1}-${name}`] === true) paid += s.money;
+        });
+        const income = data.totalIncome;
+        return { year, monthIdx, income, paid, pending: Math.max(0, income - paid) };
+    });
+}
+
+function renderIncomeTrend() {
+    const chartEl = document.getElementById('income-trend-chart');
+    if (!chartEl) return;
+    if (currentUser && currentUser.role === 'student') return;
+
+    trendData = computeTrendData(trendRange);
+    const n = trendData.length;
+
+    const totals = trendData.reduce(
+        (acc, d) => ({ income: acc.income + d.income, paid: acc.paid + d.paid, pending: acc.pending + d.pending }),
+        { income: 0, paid: 0, pending: 0 }
+    );
+    const labelMap = { '6m': '近 6 個月合計', '12m': '近 1 年合計', 'ytd': '今年累計' };
+    const summaryEl = document.getElementById('income-trend-summary');
+    if (summaryEl) {
+        summaryEl.innerHTML = `${labelMap[trendRange]}：<strong>${trendMoney(totals.income)}</strong>　` +
+            `<span class="trend-paid">已收款 ${trendMoney(totals.paid)}</span>　` +
+            `<span class="trend-pending">待收款 ${trendMoney(totals.pending)}</span>`;
+    }
+
+    const plotW = TREND_W - TREND_L - TREND_R;
+    const plotH = TREND_H - TREND_T - TREND_B;
+    const xAt = (i) => n === 1
+        ? TREND_L + plotW / 2
+        : TREND_L + TREND_PAD + i * ((plotW - TREND_PAD * 2) / (n - 1));
+    const { step, max } = niceMoneyScale(Math.max(...trendData.map(d => d.income), 0));
+    const yAt = (v) => TREND_T + plotH - (v / max) * plotH;
+    const hasData = trendData.some(d => d.income > 0);
+
+    trendGeom = { xs: trendData.map((_, i) => xAt(i)), ys: trendData.map(d => yAt(d.income)) };
+
+    let svg = `<svg viewBox="0 0 ${TREND_W} ${TREND_H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="每月收入折線圖">`;
+
+    for (let v = 0; v <= max; v += step) {
+        const y = yAt(v);
+        svg += `<line x1="${TREND_L}" y1="${y}" x2="${TREND_L + plotW}" y2="${y}" stroke="${v === 0 ? '#b0bec5' : '#eceff1'}" stroke-width="1"/>`;
+        svg += `<text x="${TREND_L - 8}" y="${y + 4}" text-anchor="end" font-size="11" fill="#7f8c8d">${v.toLocaleString()}</text>`;
+    }
+    svg += `<text x="4" y="14" font-size="12" fill="#7f8c8d">元</text>`;
+
+    const baseY = TREND_T + plotH;
+    trendData.forEach((d, i) => {
+        const x = trendGeom.xs[i];
+        svg += `<text x="${x}" y="${baseY + 18}" text-anchor="middle" font-size="12" fill="#7f8c8d">${d.monthIdx + 1}月</text>`;
+        // 第一個點與每年 1 月，多標一行年份，跨年時才看得出來
+        if (i === 0 || d.monthIdx === 0) {
+            svg += `<text x="${x}" y="${baseY + 33}" text-anchor="middle" font-size="10" fill="#b0bec5">${d.year}</text>`;
+        }
+    });
+
+    if (hasData) {
+        const pts = trendData.map((d, i) => `${trendGeom.xs[i].toFixed(1)},${trendGeom.ys[i].toFixed(1)}`).join(' ');
+        svg += `<polyline points="${pts}" fill="none" stroke="#4db6ac" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
+        trendData.forEach((d, i) => {
+            const x = trendGeom.xs[i].toFixed(1);
+            const y = trendGeom.ys[i];
+            svg += `<circle class="trend-dot" data-dot="${i}" cx="${x}" cy="${y.toFixed(1)}" r="4.5"/>`;
+            // 點太多會互相擠在一起，只有 7 個點以內才直接標金額，其餘靠提示框
+            if (n <= 7) {
+                svg += `<text x="${x}" y="${(y - 10).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="#2c3e50">${Math.round(d.income).toLocaleString()}</text>`;
+            }
+        });
+        // 透明的大圓放在最上層，手指比較好點
+        trendData.forEach((d, i) => {
+            svg += `<circle class="trend-hit" data-hit="${i}" cx="${trendGeom.xs[i].toFixed(1)}" cy="${trendGeom.ys[i].toFixed(1)}" r="16"/>`;
+        });
+    } else {
+        svg += `<text x="${TREND_L + plotW / 2}" y="${TREND_T + plotH / 2}" text-anchor="middle" font-size="14" fill="#95a5a6">這段期間沒有收入紀錄</text>`;
+    }
+
+    svg += `</svg>`;
+    chartEl.innerHTML = svg;
+
+    if (hasData && trendActiveIndex !== null && trendActiveIndex < n) {
+        showTrendTooltip(trendActiveIndex);
+    } else {
+        hideTrendTooltip();
+    }
+}
+
+function showTrendTooltip(i) {
+    const tip = document.getElementById('income-trend-tooltip');
+    const wrap = document.getElementById('income-trend-wrap');
+    const svgEl = document.querySelector('#income-trend-chart svg');
+    const d = trendData[i];
+    if (!tip || !wrap || !svgEl || !d) return;
+
+    trendActiveIndex = i;
+    tip.innerHTML = `
+        <div class="trend-tip-title">${d.year} 年 ${d.monthIdx + 1} 月</div>
+        <div class="trend-tip-row"><span>預定收入</span><strong>${trendMoney(d.income)}</strong></div>
+        <div class="trend-tip-row"><span>已收款</span><strong class="trend-paid">${trendMoney(d.paid)}</strong></div>
+        <div class="trend-tip-row"><span>待收款</span><strong class="trend-pending">${trendMoney(d.pending)}</strong></div>`;
+    tip.classList.remove('hide');
+
+    // SVG 會隨螢幕寬度縮放，所以要用實際畫出來的大小換算圓點的位置
+    const svgRect = svgEl.getBoundingClientRect();
+    const wrapRect = wrap.getBoundingClientRect();
+    const scale = svgRect.width / TREND_W;
+    const px = (svgRect.left - wrapRect.left) + trendGeom.xs[i] * scale;
+    const py = (svgRect.top - wrapRect.top) + trendGeom.ys[i] * scale;
+
+    const tw = tip.offsetWidth;
+    const th = tip.offsetHeight;
+    const left = Math.max(4, Math.min(px - tw / 2, wrapRect.width - tw - 4));
+    let top = py - th - 12;
+    if (top < 4) top = py + 14;   // 上方放不下就改放在點的下面
+    tip.style.left = `${left}px`;
+    tip.style.top = `${top}px`;
+
+    document.querySelectorAll('#income-trend-chart .trend-dot').forEach(c => {
+        c.classList.toggle('active', Number(c.dataset.dot) === i);
+    });
+}
+
+function hideTrendTooltip() {
+    trendActiveIndex = null;
+    const tip = document.getElementById('income-trend-tooltip');
+    if (tip) tip.classList.add('hide');
+    document.querySelectorAll('#income-trend-chart .trend-dot').forEach(c => c.classList.remove('active'));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.trend-range-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            trendRange = btn.dataset.range;
+            document.querySelectorAll('.trend-range-btn').forEach(b => b.classList.toggle('active', b === btn));
+            trendActiveIndex = null;
+            renderIncomeTrend();
+        });
+    });
+
+    const wrap = document.getElementById('income-trend-wrap');
+    if (wrap) {
+        wrap.addEventListener('pointerdown', (e) => { trendLastPointer = e.pointerType || 'mouse'; });
+
+        // 滑鼠：移到點上就顯示、移開就收起
+        wrap.addEventListener('pointerover', (e) => {
+            if (e.pointerType !== 'mouse') return;
+            const hit = e.target.closest('[data-hit]');
+            if (hit) showTrendTooltip(Number(hit.dataset.hit));
+        });
+        wrap.addEventListener('pointerout', (e) => {
+            if (e.pointerType !== 'mouse') return;
+            if (e.target.closest('[data-hit]')) hideTrendTooltip();
+        });
+
+        // 觸控：點一下顯示，再點同一個點或點空白處就收起
+        wrap.addEventListener('click', (e) => {
+            const hit = e.target.closest('[data-hit]');
+            if (!hit) { hideTrendTooltip(); return; }
+            const i = Number(hit.dataset.hit);
+            if (trendLastPointer === 'mouse') { showTrendTooltip(i); return; }
+            if (trendActiveIndex === i) hideTrendTooltip(); else showTrendTooltip(i);
+        });
+    }
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#income-trend-wrap')) hideTrendTooltip();
+    });
+});
+
+window.renderIncomeTrend = renderIncomeTrend;
