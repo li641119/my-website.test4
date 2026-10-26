@@ -1041,6 +1041,10 @@ navBtns.forEach((btn) => {
             renderStudentDbPanel();
         }
 
+        if (targetPanelId === 'panel-calendar' && typeof window.maybeScrollCalendarToToday === 'function') {
+            window.maybeScrollCalendarToToday();
+        }
+
         if (targetPanelId === 'panel-overview') {
             if (typeof window.renderOverviewPanel === 'function') {
                 window.renderOverviewPanel();
@@ -1563,6 +1567,28 @@ function renderPayQrPreview(slot) {
         : '<span class="no-data-hint">尚未上傳</span>';
 }
 
+// 取得兩組帳戶：新格式用 accounts 陣列；舊格式（只有一組）自動當成帳戶 1
+function getPayAccounts(s) {
+    s = s || {};
+    let list;
+    if (Array.isArray(s.accounts)) {
+        list = s.accounts.slice(0, 2);
+    } else {
+        list = [{
+            label: '', bankName: s.bankName || '', bankCode: s.bankCode || '',
+            account: s.account || '', holder: s.holder || ''
+        }];
+    }
+    while (list.length < 2) list.push({});
+    return list.map((a) => ({
+        label: a.label || '',
+        bankName: a.bankName || '',
+        bankCode: a.bankCode || '',
+        account: a.account || '',
+        holder: a.holder || ''
+    }));
+}
+
 function payCompressImage(file) {
     return new Promise((resolve, reject) => {
         const url = URL.createObjectURL(file);
@@ -1619,10 +1645,16 @@ async function loadPaymentSettingsEditor() {
         const snap = await getDoc(doc(db, 'settings', 'payment'));
         const s = snap.exists() ? snap.data() : {};
         const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
-        setVal('pay-set-bank-name', s.bankName);
-        setVal('pay-set-bank-code', s.bankCode);
-        setVal('pay-set-account', s.account);
-        setVal('pay-set-holder', s.holder);
+
+        getPayAccounts(s).forEach((a, i) => {
+            const n = i + 1;
+            setVal(`pay-set-acc${n}-label`, a.label);
+            setVal(`pay-set-acc${n}-bank-name`, a.bankName);
+            setVal(`pay-set-acc${n}-bank-code`, a.bankCode);
+            setVal(`pay-set-acc${n}-account`, a.account);
+            setVal(`pay-set-acc${n}-holder`, a.holder);
+        });
+
         setVal('pay-set-qr1-name', s.qr1 && s.qr1.name);
         setVal('pay-set-qr2-name', s.qr2 && s.qr2.name);
         payQrDraft[1] = (s.qr1 && s.qr1.dataUrl) || null;
@@ -1639,12 +1671,26 @@ window.savePaymentSettings = async function () {
     const qrEntry = (slot) => payQrDraft[slot]
         ? { name: val(`pay-set-qr${slot}-name`) || `QR Code ${slot}`, dataUrl: payQrDraft[slot] }
         : null;
+
+    const accounts = [1, 2].map((n) => ({
+        label: val(`pay-set-acc${n}-label`),
+        bankName: val(`pay-set-acc${n}-bank-name`),
+        bankCode: val(`pay-set-acc${n}-bank-code`),
+        account: val(`pay-set-acc${n}-account`),
+        holder: val(`pay-set-acc${n}-holder`)
+    }));
+
+    // 同時把第一個有帳號的帳戶寫進舊格式欄位。
+    // 如果有學生的手機還卡在舊版網頁（快取），至少還看得到一組帳戶，不會變成空白。
+    const primary = accounts.find((a) => a.account) || accounts[0];
+
     try {
         await setDoc(doc(db, 'settings', 'payment'), {
-            bankName: val('pay-set-bank-name'),
-            bankCode: val('pay-set-bank-code'),
-            account: val('pay-set-account'),
-            holder: val('pay-set-holder'),
+            accounts,
+            bankName: primary.bankName,
+            bankCode: primary.bankCode,
+            account: primary.account,
+            holder: primary.holder,
             qr1: qrEntry(1),
             qr2: qrEntry(2),
             updatedAt: new Date().toISOString()
@@ -1655,6 +1701,7 @@ window.savePaymentSettings = async function () {
         alert('儲存失敗，請稍後再試');
     }
 };
+
 
 document.addEventListener('DOMContentLoaded', () => {
     [1, 2].forEach((slot) => {
@@ -1794,28 +1841,39 @@ function setPayBanner(type, html) {
 
 function renderPayMethodHtml(amount) {
     const s = paySettings || {};
+    // 帳號欄位有填的才顯示；idx 記住它原本是第幾組，複製按鈕才不會複製錯帳戶
+    const accounts = getPayAccounts(s)
+        .map((a, i) => ({ ...a, idx: i }))
+        .filter((a) => a.account);
     const qrs = [s.qr1, s.qr2].filter((q) => q && q.dataUrl);
-    if (!s.account && qrs.length === 0) {
+
+    if (accounts.length === 0 && qrs.length === 0) {
         return `<div class="pay-card"><p class="no-data-hint">教練尚未設定收款資訊，請直接聯繫教練。</p></div>`;
     }
 
     let html = '';
-    if (s.account) {
-        const bankText = `${payEscape(s.bankName || '')}${s.bankCode ? `（代碼 ${payEscape(s.bankCode)}）` : ''}`;
+
+    accounts.forEach((a) => {
+        const bankText = `${payEscape(a.bankName)}${a.bankCode ? `（代碼 ${payEscape(a.bankCode)}）` : ''}`;
+        const title = a.label
+            ? `🏦 ${payEscape(a.label)}`
+            : (accounts.length > 1 ? `🏦 銀行轉帳（帳戶 ${a.idx + 1}）` : '🏦 銀行轉帳');
+
         html += `
             <div class="pay-card">
-                <h3 class="pay-section-title">🏦 銀行轉帳</h3>
+                <h3 class="pay-section-title">${title}</h3>
                 ${bankText ? `<div class="pay-info-row"><span>銀行</span><strong>${bankText}</strong></div>` : ''}
-                <div class="pay-info-row"><span>帳號</span><strong>${payEscape(s.account)}</strong></div>
-                ${s.holder ? `<div class="pay-info-row"><span>戶名</span><strong>${payEscape(s.holder)}</strong></div>` : ''}
+                <div class="pay-info-row"><span>帳號</span><strong>${payEscape(a.account)}</strong></div>
+                ${a.holder ? `<div class="pay-info-row"><span>戶名</span><strong>${payEscape(a.holder)}</strong></div>` : ''}
                 <div class="pay-info-row"><span>金額</span><strong>$${amount.toLocaleString()}</strong></div>
                 <div class="pay-copy-row">
-                    <button type="button" onclick="copyPayInfo('account', this)">複製帳號</button>
-                    <button type="button" onclick="copyPayInfo('amount', this)">複製金額</button>
-                    <button type="button" onclick="copyPayInfo('all', this)">複製全部資訊</button>
+                    <button type="button" onclick="copyPayInfo('account', ${a.idx}, this)">複製帳號</button>
+                    <button type="button" onclick="copyPayInfo('amount', ${a.idx}, this)">複製金額</button>
+                    <button type="button" onclick="copyPayInfo('all', ${a.idx}, this)">複製全部資訊</button>
                 </div>
             </div>`;
-    }
+    });
+
     if (qrs.length > 0) {
         html += `
             <div class="pay-card">
@@ -1833,19 +1891,19 @@ function renderPayMethodHtml(amount) {
     return html;
 }
 
-window.copyPayInfo = async function (kind, btn) {
-    const s = paySettings || {};
+window.copyPayInfo = async function (kind, idx, btn) {
+    const a = getPayAccounts(paySettings)[idx] || {};
     let text = '';
     if (kind === 'account') {
-        text = s.account || '';
+        text = a.account || '';
     } else if (kind === 'amount') {
         text = String(payCurrentAmount);
     } else {
-        const bankLine = `${s.bankName || ''}${s.bankCode ? `（代碼 ${s.bankCode}）` : ''}`;
+        const bankLine = `${a.bankName || ''}${a.bankCode ? `（代碼 ${a.bankCode}）` : ''}`;
         text = [
             `銀行：${bankLine}`,
-            `帳號：${s.account || ''}`,
-            `戶名：${s.holder || ''}`,
+            `帳號：${a.account || ''}`,
+            `戶名：${a.holder || ''}`,
             `金額：$${payCurrentAmount.toLocaleString()}`
         ].join('\n');
     }

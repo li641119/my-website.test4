@@ -985,12 +985,14 @@ function updateWeekDates() {
 }
 
 function changeWeek(direction) {
+    calendarNeedsScrollToToday = true;
     viewDate.setDate(viewDate.getDate() + (direction * 7));
     updateWeekDates(); 
     renderAll();
 }
 
 function goToday() {
+    calendarNeedsScrollToToday = true;
     viewDate = new Date();
     updateWeekDates(); 
     renderAll();
@@ -1170,6 +1172,7 @@ export function renderAll() {
             if (incomePanel && incomePanel.classList.contains('active')) {
                 renderIncomePanel();
             }
+            maybeScrollCalendarToToday();
         }
     } catch (error) {
         console.error("❌ renderAll 執行失敗:", error);
@@ -1887,3 +1890,32 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 window.renderIncomeTrend = renderIncomeTrend;
+
+// 手機版：週行事曆需要橫向捲動，載入、換週、按「本週」時自動捲到今天那一欄。
+// 只在「需要」的時候捲動一次，不會每次課表資料更新都把你拉回去。
+let calendarNeedsScrollToToday = true;
+
+function maybeScrollCalendarToToday() {
+    if (!calendarNeedsScrollToToday) return;
+    if (!window.matchMedia('(max-width: 768px)').matches) {
+        calendarNeedsScrollToToday = false;
+        return;
+    }
+
+    const container = document.querySelector('#main-app .calendar-container');
+    // 行事曆分頁被藏起來時量不到寬度，先保留旗標，等切回行事曆分頁再試
+    if (!container || container.clientWidth === 0) return;
+
+    calendarNeedsScrollToToday = false;
+
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    const header = Array.from(document.querySelectorAll('#main-app .day-header'))
+        .find((h) => h.dataset.fullDate === todayStr);
+    if (!header) { container.scrollLeft = 0; return; }   // 這週沒有今天（翻到別週）→ 回到最左邊
+
+    const timeCol = document.querySelector('#main-app .time-column');
+    const offset = (timeCol ? timeCol.offsetWidth : 0) + 4;
+    container.scrollLeft +=
+        header.getBoundingClientRect().left - container.getBoundingClientRect().left - offset;
+}
+window.maybeScrollCalendarToToday = maybeScrollCalendarToToday;

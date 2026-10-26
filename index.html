@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>大四行事曆+教練管理系統</title>
     <link rel="stylesheet" href="cal-gemini.css">
     <link rel="icon" href="data:,">
@@ -138,12 +138,32 @@
                     <h3 class="panel-subtitle">💳 收款資訊設定</h3>
                     <div class="payment-settings-card">
                         <p class="payment-settings-hint">學生在「前往繳費」頁會看到這裡的資訊，欄位留空就不顯示。</p>
-                        <div class="payment-settings-grid">
-                            <label>銀行名稱<input type="text" id="pay-set-bank-name" placeholder="例如：中國信託"></label>
-                            <label>銀行代碼<input type="text" id="pay-set-bank-code" inputmode="numeric" placeholder="例如：822"></label>
-                            <label>帳號<input type="text" id="pay-set-account" inputmode="numeric"></label>
-                            <label>戶名<input type="text" id="pay-set-holder"></label>
+                        <div class="payment-account-group">
+                            <h4 class="payment-account-title">帳戶 1</h4>
+                            <div class="payment-settings-grid">
+                                <label class="span-2">帳戶名稱（選填，學生會看到）
+                                    <input type="text" id="pay-set-acc1-label" placeholder="例如：中信主要帳戶">
+                                </label>
+                                <label>銀行名稱<input type="text" id="pay-set-acc1-bank-name" placeholder="例如：中國信託"></label>
+                                <label>銀行代碼<input type="text" id="pay-set-acc1-bank-code" inputmode="numeric" placeholder="例如：822"></label>
+                                <label>帳號<input type="text" id="pay-set-acc1-account" inputmode="numeric"></label>
+                                <label>戶名<input type="text" id="pay-set-acc1-holder"></label>
+                            </div>
                         </div>
+
+                        <div class="payment-account-group">
+                            <h4 class="payment-account-title">帳戶 2</h4>
+                            <div class="payment-settings-grid">
+                                <label class="span-2">帳戶名稱（選填，學生會看到）
+                                    <input type="text" id="pay-set-acc2-label" placeholder="例如：郵局帳戶">
+                                </label>
+                                <label>銀行名稱<input type="text" id="pay-set-acc2-bank-name" placeholder="例如：中華郵政"></label>
+                                <label>銀行代碼<input type="text" id="pay-set-acc2-bank-code" inputmode="numeric" placeholder="例如：700"></label>
+                                <label>帳號<input type="text" id="pay-set-acc2-account" inputmode="numeric"></label>
+                                <label>戶名<input type="text" id="pay-set-acc2-holder"></label>
+                            </div>
+                        </div>
+
                         <div class="payment-qr-editors">
                             <div class="payment-qr-editor">
                                 <label>QR Code 1 名稱<input type="text" id="pay-set-qr1-name" placeholder="例如：街口支付"></label>
