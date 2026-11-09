@@ -36,7 +36,7 @@ let suppressAuthUI = false;
 const COACH_EMAIL = "li641119@gmail.com"; 
 
 // currentUser
-import { renderAll } from './cal-gemini.js';
+import { renderAll, toYMD } from './cal-gemini.js';
 export let currentUser = {
     uid: null,
     email: '',
@@ -86,7 +86,6 @@ if (registerForm) {
             const existingData = existingSnap.exists() ? existingSnap.data() : {};
             const patch = { email: email };
         
-            console.log('輸入的:', email, '/ 帳號的:', cred.user.email);
             await setDoc(doc(db, "students", name), patch, { merge: true });
             await signOut(auth);
 
@@ -128,7 +127,6 @@ if (loginForm) {
 
         signInWithEmailAndPassword(auth, email, password)
             .then((userCredential) => {
-                console.log("登入成功:", userCredential.user.email);
 
                 if (rememberCheckbox && rememberCheckbox.checked) {
                     localStorage.setItem(REMEMBER_EMAIL_KEY, email);
@@ -202,7 +200,7 @@ const logoutButtons = [
     document.getElementById('logout-btn'),
     document.getElementById('coach-top-logout-btn'),
     document.getElementById('coach-sidebar-logout-btn'),
-    document.getElementById('student-logout-btn')   // ← 新增這行
+    document.getElementById('student-logout-btn')
 ].filter(Boolean);
 
 logoutButtons.forEach((logoutButton) => {
@@ -237,7 +235,6 @@ onAuthStateChanged(auth, async (user) => {
     const logoutBtnEl = document.getElementById('logout-btn');
 
     if (user) {
-        console.log("當前登入者:", user.email);
         loginContainer.style.display = 'none';
         if (logoutBtnEl) logoutBtnEl.classList.remove('hide');
 
@@ -258,7 +255,9 @@ onAuthStateChanged(auth, async (user) => {
             startCoachPaymentWatcher();
             startIncomeRecordsWatcher();
         } else {
+            resetStudentView();     // 先清掉畫面，避免看到上一位使用者的資料
             let studentName = '';
+            let lookupFailed = false;
             try {
                 const q = query(collection(db, "students"), where("email", "==", user.email));
                 const snap = await getDocs(q);
@@ -269,7 +268,11 @@ onAuthStateChanged(auth, async (user) => {
                 }
             } catch (err) {
                 console.error("查詢學生姓名失敗:", err);
+                lookupFailed = true;
             }
+
+            // 查詢期間如果已經登出（或換了人），就不要再啟動任何監聽
+            if (!auth.currentUser || auth.currentUser.uid !== user.uid) return;
 
             currentUser = { uid: user.uid, email: user.email, role: 'student', name: studentName };
 
@@ -285,9 +288,16 @@ onAuthStateChanged(auth, async (user) => {
             startStudentLiveSync(studentName);
             startStudentPaymentWatchers(studentName);
             watchOverviewForStudent();
+
+            if (!studentName) {
+                showStudentBanner(lookupFailed
+                    ? '學生資料讀取失敗，請檢查網路後重新整理頁面。'
+                    : '找不到你的學生資料。請聯絡教練，確認你註冊時填的姓名與教練登記的是否一致。');
+            }
         }
 
-        renderAll();
+        // 學生端等課表資料送到後才會畫畫面，這裡不先畫，避免閃一下 0
+        if (currentUser.role === 'coach') renderAll();
     } else {
         console.log("目前為登出狀態");
         loginContainer.style.display = 'flex';
@@ -298,10 +308,13 @@ onAuthStateChanged(auth, async (user) => {
 
         currentUser = { uid: null, email: '', role: 'coach', name: '' };
 
-        if (unsubscribe) unsubscribe();
+        if (unsubscribe) { unsubscribe(); unsubscribe = null; }
         stopCoachPaymentWatcher();
         stopStudentPaymentWatchers();
         stopIncomeRecordsWatcher();
+        stopOverviewForStudent();
+        stopStudentTimeRefresh();
+        resetStudentView();     // 清掉畫面，下一位登入的人不會看到前一位的資料
     }
 });
 
@@ -332,9 +345,9 @@ function openStudentProfile(name, data) {
     // 預設查詢區間：本月 1 號到月底
     const now = new Date();
     document.getElementById('profile-start').value =
-        new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString('en-CA');
+        toYMD(new Date(now.getFullYear(), now.getMonth(), 1));
     document.getElementById('profile-end').value =
-        new Date(now.getFullYear(), now.getMonth() + 1, 0).toLocaleDateString('en-CA');
+        toYMD(new Date(now.getFullYear(), now.getMonth() + 1, 0));
 
     renderStudentProfileDetails();
 }
@@ -587,7 +600,7 @@ function renderOverviewStats() {
                 const d = new Date(monday);
                 d.setDate(monday.getDate() + i);
                 if (d.getDay() !== targetDay) continue;
-                const dStr = d.toLocaleDateString('en-CA');
+                const dStr = toYMD(d);
                 if (exceptions.includes(dStr)) continue;
                 if (course.date && dStr < course.date) continue;
                 weekMinutes += duration;
@@ -632,39 +645,45 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // 學生端：即時監聽公告/時段，教練一按「更新」就會同步顯示
-function watchOverviewForStudent() {
-    try {
-        onSnapshot(doc(db, "overview", OVERVIEW_DOC_ID), (snap) => {
-            const data = snap.exists() ? snap.data() : {};
+let overviewUnsub = null;
 
-            const noticeEl = document.getElementById('student-notice-content');
-            if (noticeEl) noticeEl.innerText = data.noticeLive || '目前沒有公告';
-
-            const slotsEl = document.getElementById('student-slots-content');
-            if (slotsEl) {
-                const lines = (data.slotsLive || '').split('\n').map((s) => s.trim()).filter(Boolean);
-                if (lines.length === 0) {
-                    slotsEl.innerHTML = '<p>目前沒有公告時段</p>';
-                } else {
-                    slotsEl.innerHTML = lines.map((line) => `<div class="slot-chip">${line}</div>`).join('');
-                }
-            }
-        });
-    } catch (err) {
-        console.error('監聽總覽資料失敗:', err);
-    }
+function stopOverviewForStudent() {
+    if (overviewUnsub) { overviewUnsub(); overviewUnsub = null; }
 }
 
+function watchOverviewForStudent() {
+    stopOverviewForStudent();   // 避免每登入一次就多一個監聽器
+    overviewUnsub = onSnapshot(doc(db, "overview", OVERVIEW_DOC_ID), (snap) => {
+        const data = snap.exists() ? snap.data() : {};
 
-// 點姓名展開、收合堂數區塊（一次只展開一個，避免畫面太亂）
-window.toggleStudentDetail = function (name) {
-    const detail = document.getElementById(`detail-${name}`);
-    if (!detail) return;
-    document.querySelectorAll('.db-detail').forEach((el) => {
-        if (el !== detail) el.classList.add('hide');
+        const noticeEl = document.getElementById('student-notice-content');
+        if (noticeEl) noticeEl.innerText = data.noticeLive || '目前沒有公告';
+
+        const slotsEl = document.getElementById('student-slots-content');
+        if (slotsEl) {
+            const lines = (data.slotsLive || '').split('\n').map((x) => x.trim()).filter(Boolean);
+            slotsEl.innerHTML = '';
+            if (lines.length === 0) {
+                const p = document.createElement('p');
+                p.innerText = '目前沒有公告時段';
+                slotsEl.appendChild(p);
+            } else {
+                // 用文字節點寫入，教練輸入 < > 之類的符號也不會破版
+                lines.forEach((line) => {
+                    const chip = document.createElement('div');
+                    chip.className = 'slot-chip';
+                    chip.innerText = line;
+                    slotsEl.appendChild(chip);
+                });
+            }
+        }
+    }, (err) => {
+        console.error('監聽總覽資料失敗:', err);
+        const noticeEl = document.getElementById('student-notice-content');
+        if (noticeEl) noticeEl.innerText = '公告暫時讀取失敗，請檢查網路後重新整理頁面';
     });
-    detail.classList.toggle('hide');
-};
+}
+
 
 // 新增學生
 window.addStudent = async function () {
@@ -839,10 +858,132 @@ function renderStudentNextClassCard() {
 }
 
 
+// ------------------------------------------------------------
+// 學生端：登入、登出時把畫面清成「讀取中」，並回到首頁分頁
+// （避免共用手機、或同一個分頁換帳號時，看到上一位的資料）
+// ------------------------------------------------------------
+let studentDayDetailDefaultHtml = null;
+
+function resetStudentView() {
+    window.courses = undefined;
+    if (typeof window.resetStudentCalendarState === 'function') window.resetStudentCalendarState();
+
+    const setText = (id, text) => { const el = document.getElementById(id); if (el) el.innerText = text; };
+    setText('student-name-display', '同學');
+    setText('student-total-hours', '—');
+    setText('student-total-hours-sub', '');
+    setText('student-class-count', '—');
+    setText('student-class-count-sub', '');
+    setText('student-next-class', '讀取中...');
+    setText('student-notice-content', '讀取中...');
+    setText('student-slots-content', '讀取中...');
+    setText('student-history-result', '選擇開始與結束日期後點「查詢」');
+    setText('pay-amount', '$0');
+    setText('pay-hours', '');
+
+    const statusEl = document.getElementById('student-payment-status');
+    if (statusEl) { statusEl.innerText = '讀取中…'; statusEl.style.color = '#90a4ae'; }
+
+    ['student-month-grid', 'progress-chart', 'pay-breakdown', 'pay-method-area', 'pay-report-area', 'pay-status-banner']
+        .forEach((id) => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
+
+    const dayDetailEl = document.getElementById('student-day-detail');
+    if (dayDetailEl) {
+        if (studentDayDetailDefaultHtml === null) studentDayDetailDefaultHtml = dayDetailEl.innerHTML;
+        else dayDetailEl.innerHTML = studentDayDetailDefaultHtml;
+    }
+
+    ['student-history-start', 'student-history-end'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+
+    // 月份、年份、分頁都回到預設（今天所在的月份、首頁）
+    const now = new Date();
+    payYear = now.getFullYear();
+    payMonthIdx = now.getMonth();
+    payCurrentAmount = 0;
+    document.querySelectorAll('.student-nav-btn[data-panel]').forEach((b) =>
+        b.classList.toggle('active', b.dataset.panel === 'panel-student-home'));
+    document.querySelectorAll('.student-panel').forEach((pn) =>
+        pn.classList.toggle('active', pn.dataset.panelId === 'panel-student-home'));
+
+    showStudentBanner('');
+}
+
+// 學生首頁最上方的提示條（找不到學生資料、資料讀取失敗時顯示）；傳空字串就移除
+function showStudentBanner(text) {
+    let el = document.getElementById('student-banner');
+    if (!text) { if (el) el.remove(); return; }
+    if (!el) {
+        const host = document.querySelector('#panel-student-home .panel-inner') || document.getElementById('panel-student-home');
+        if (!host) return;
+        el = document.createElement('div');
+        el.id = 'student-banner';
+        el.className = 'student-banner';
+        host.insertBefore(el, host.firstChild);
+    }
+    el.innerText = text;
+}
+
+// ------------------------------------------------------------
+// 學生端：時間到了自動更新（上完課變灰、下次上課換下一堂、跨日重算）
+// 在「今天下一個開始或下課的時間點」設定計時器，到點才重畫，不用一直輪詢。
+// ------------------------------------------------------------
+let studentTimeTimer = null;
+
+function refreshStudentTimeViews() {
+    if (!currentUser || currentUser.role !== 'student') return;
+    renderAll();                         // 首頁「已上完」時數
+    renderStudentNextClassCard();
+    refreshStudentPaymentViews();        // 首頁費用卡、繳費頁
+    if (typeof window.renderStudentMonthCalendar === 'function') window.renderStudentMonthCalendar();
+    if (typeof window.renderProgressChart === 'function') window.renderProgressChart();
+}
+
+function stopStudentTimeRefresh() {
+    clearTimeout(studentTimeTimer);
+    studentTimeTimer = null;
+}
+
+function scheduleStudentTimeRefresh() {
+    stopStudentTimeRefresh();
+    if (!currentUser || currentUser.role !== 'student' || !currentUser.name) return;
+
+    const now = new Date();
+    const todayStr = toYMD(now);
+    // 預設等到明天 00:00:01（跨日也要重算「今天」）
+    let next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+
+    if (typeof window.getStudentLessonDetails === 'function') {
+        window.getStudentLessonDetails(currentUser.name, todayStr, todayStr, true).forEach((l) => {
+            [l.start, l.end].forEach((t) => {
+                if (!t) return;
+                const at = new Date(`${todayStr}T${t}:00`);
+                at.setSeconds(at.getSeconds() + 1);   // 晚 1 秒，確保「下課時間 <= 現在」成立
+                if (at > now && at < next) next = at;
+            });
+        });
+    }
+
+    studentTimeTimer = setTimeout(() => {
+        refreshStudentTimeViews();
+        scheduleStudentTimeRefresh();
+    }, Math.max(1000, next - now));
+}
+
+// 手機鎖屏或切到背景時計時器會被暫停：回到畫面時立刻重算一次
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (!currentUser || currentUser.role !== 'student') return;
+    refreshStudentTimeViews();
+    scheduleStudentTimeRefresh();
+});
+
 // 同步student view的資料
 function startStudentLiveSync(studentName) {
     console.log(`🔒學生模式：正在同步 [${studentName}] 的課程...`);
-    if (unsubscribe) unsubscribe();
+    if (unsubscribe) { unsubscribe(); unsubscribe = null; }
 
     if (!studentName) {
         if (window.updateCalendarUI) window.updateCalendarUI([]);
@@ -855,7 +996,7 @@ function startStudentLiveSync(studentName) {
         where("name", ">=", baseName),
         where("name", "<=", baseName + "\uf8ff")
     );
-    
+
     unsubscribe = onSnapshot(q, (snapshot) => {
         const myEvents = [];
 
@@ -865,6 +1006,7 @@ function startStudentLiveSync(studentName) {
             myEvents.push({ ...data, id: data.id ? data.id.toString() : docSnap.id });
         });
 
+        showStudentBanner('');   // 讀取成功，清掉之前的錯誤提示
 
         if (window.updateCalendarUI) {
             window.updateCalendarUI(myEvents);
@@ -879,6 +1021,11 @@ function startStudentLiveSync(studentName) {
         if (typeof window.renderProgressChart === 'function') {
             window.renderProgressChart();
         }
+
+        scheduleStudentTimeRefresh();
+    }, (err) => {
+        console.error('讀取課表失敗:', err);
+        showStudentBanner('課表讀取失敗，請檢查網路後重新整理頁面。');
     });
 }
 
@@ -923,43 +1070,6 @@ window.setIncomePaidStatus = async function (year, month, studentName, isPaid) {
     }
 };
 
-
-// 讀取某個月份所有學生的收款狀態
-window.loadIncomePaidStatuses = async function (
-    year,
-    month
-) {
-
-    try {
-        const q = query(
-            collection(db, "incomeRecords"),
-            where("year", "==", year),
-            where("month", "==", month + 1)
-        );
-
-        const snapshot = await getDocs(q);
-
-        const result = {};
-
-        snapshot.forEach((docSnap) => {
-            const data = docSnap.data();
-
-            if (data.studentName) {
-                result[data.studentName] = data.isPaid === true;
-            }
-        });
-
-        console.log(
-            `📥 已讀取 ${year}-${String(month + 1).padStart(2, '0')} 收款紀錄，共 ${Object.keys(result).length} 筆`
-        );
-
-        return result;
-
-    } catch (error) {
-        console.error("❌ 讀取收款紀錄失敗:", error);
-        return {};
-    }
-};
 
 // 自動記憶上課價錢
 document.addEventListener('DOMContentLoaded', () => {
@@ -1594,6 +1704,7 @@ function updateHomePaymentCard() {
     const set = (text, color) => { statusEl.innerText = text; statusEl.style.color = color; };
     const report = payStudentReports[key];
 
+    if (!coursesReady) { set('讀取中…', '#90a4ae'); return; }
     if (isStudentMonthPaid(year, monthIdx)) { set('已繳費', '#2e7d32'); return; }
     if (report && report.status === 'reported') { set('已回報，待確認', '#e67e22'); return; }
     if (coursesReady && amount <= 0) { set('本月無費用', '#7f8c8d'); return; }
@@ -1633,8 +1744,16 @@ window.changePayMonth = function (direction) {
 };
 
 function setPayBanner(type, html) {
-    const el = document.getElementById('pay-status-banner');
-    if (el) el.innerHTML = `<div class="pay-banner pay-banner-${type}">${html}</div>`;
+    let el = document.getElementById('pay-status-banner');
+    if (!el) {
+        // index.html 沒有這個容器時自動建立，放在「應繳金額」下面
+        const anchor = document.getElementById('pay-breakdown');
+        if (!anchor) return;
+        el = document.createElement('div');
+        el.id = 'pay-status-banner';
+        anchor.insertAdjacentElement('afterend', el);
+    }
+    el.innerHTML = `<div class="pay-banner pay-banner-${type}">${html}</div>`;
 }
 
 function renderPayMethodHtml(amount) {

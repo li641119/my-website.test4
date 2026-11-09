@@ -1,5 +1,23 @@
 // --- 全域變數 ---
 import { currentUser } from './app.js';
+
+// 統一的日期格式 YYYY-MM-DD（用本地時間手動組，不依賴瀏覽器的語系格式）
+export function toYMD(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+// 一堂課「上完了嗎」：日期在今天以前，或今天且下課時間已過。
+// 沒有填下課時間的課一律視為還沒上完，避免被誤判成已完成。
+// 月曆、時數統計、金額、學習歷程都用這一個判斷。
+function isLessonCompleted(dStr, endStr, now = new Date()) {
+    const todayStr = toYMD(now);
+    if (dStr < todayStr) return true;
+    if (dStr > todayStr) return false;
+    if (!endStr) return false;
+    const nowTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    return endStr <= nowTime;
+}
+window.isLessonCompleted = isLessonCompleted;
 // 教練端財務資料起算點：財務報表的月份切換、收入折線圖共用
 const FINANCE_DATA_START = '2026-10-01';
 const FINANCE_START_YEAR = parseInt(FINANCE_DATA_START.slice(0, 4), 10);
@@ -102,22 +120,6 @@ function getRecurringDatesInMonth(
     return result;
 }
 
-function countOccurrencesInMonth(
-    year,
-    monthIndex,
-    targetDay,
-    exceptions = [],
-    courseStartDate = null
-) {
-    return getRecurringDatesInMonth(
-        year,
-        monthIndex,
-        targetDay,
-        exceptions,
-        courseStartDate
-    ).length;
-}
-
 
 window.updateCalendarUI = function(cloudEvents) {
     try {
@@ -151,7 +153,6 @@ window.updateCalendarUI = function(cloudEvents) {
 
 document.addEventListener('DOMContentLoaded', () => {
     updateWeekDates();
-    loadData();
     
     const dropzone = document.getElementById('dropzone');
     if (dropzone) {
@@ -436,7 +437,7 @@ function saveFromModal() {
     } else {
         const dayHeaders = document.querySelectorAll('.day-header');
         const targetHeader = Array.from(dayHeaders).find(h => h.dataset.day === (day === "8" ? "0" : (parseInt(day)-1).toString()) );
-        dateStr = targetHeader ? targetHeader.dataset.fullDate : new Date().toLocaleDateString('en-CA');
+        dateStr = targetHeader ? targetHeader.dataset.fullDate : toYMD(new Date());
     }
 
     const courseData = { 
@@ -675,12 +676,6 @@ window.updateStats = function() {
 }
 
 
-// 已收款狀態改讀 app.js 即時監聽的 window.incomePaidMap（month 是 JS 的 0~11）
-function getIncomePaidStatus(year, month, studentName) {
-    const map = window.incomePaidMap || {};
-    return map[`${year}-${month + 1}-${studentName}`] === true;
-}
-
 // 把財務報表月份限制在「起算月 ~ 本月」之間，回傳目前位置與邊界
 function clampIncomeMonth() {
     const now = new Date();
@@ -810,47 +805,6 @@ export function renderIncomePanel() {
 }
 
 
-// 從 Firebase 重新載入指定月份
-async function loadIncomePaidStatusForMonth(year, month) {
-
-    if (
-        incomePaidCacheYear === year &&
-        incomePaidCacheMonth === month
-    ) {
-        return;
-    }
-
-    incomePaidCacheYear = year;
-    incomePaidCacheMonth = month;
-
-    incomePaidCache = {};
-
-    if (typeof window.loadIncomePaidStatuses !== 'function') {
-        console.error('❌ 找不到 window.loadIncomePaidStatuses');
-        return;
-    }
-
-    try {
-
-        const result =
-            await window.loadIncomePaidStatuses(
-                year,
-                month
-            );
-
-        incomePaidCache = result || {};
-
-    } catch (error) {
-
-        console.error(
-            '❌ 載入月份收款狀態失敗:',
-            error
-        );
-
-        incomePaidCache = {};
-    }
-}
-
 // 保留給 app.js / HTML 導覽列使用
 window.renderIncomePanel = renderIncomePanel;
 
@@ -966,7 +920,6 @@ function updateStudentColor(name, newColor) {
         }
     });
     renderAll();
-    saveToStorage();
 }
 
 // --- 7. 日期與儲存 ---
@@ -982,7 +935,7 @@ function updateWeekDates() {
         date.setDate(monday.getDate() + index);
         const label = header.querySelector('.date-label');
         if (label) label.innerText = `${date.getMonth() + 1}/${date.getDate()}`;
-        header.dataset.fullDate = date.toLocaleDateString('en-CA');
+        header.dataset.fullDate = toYMD(date);
     });
 
     const middleDate = new Date(monday); 
@@ -1024,29 +977,6 @@ function toggleRepeatEndVisibility() {
 }
 
 
-function saveToStorage() { 
-    const currentCourses = window.courses || courses || [];
-    localStorage.setItem('coach_data_v3', JSON.stringify(currentCourses)); 
-}
-
-function loadData() {
-    console.log("正在連線至雲端資料庫...");
-}
-
-function renderAndSave() { 
-    renderAll();
-}
-
-function clearWorkData() {
-    if (confirm("⚠️ 確定要清空所有課程資料嗎？此操作不可逆！")) {
-        courses = [];
-        window.courses = [];
-        localStorage.removeItem('coach_data_v3');
-        renderAll();
-        console.log("🧹 課程資料已清空");
-    }
-}
-
 function getMondaysOfMonth(year, month) {
     const mondays = [];
     const firstDay = new Date(year, month, 1);
@@ -1070,11 +1000,13 @@ function getMondaysOfMonth(year, month) {
 // ------------------------------------------------------------
 export function renderAll() {
     try {
-        const isStudent = currentUser && currentUser.role === 'student';
+        // 學生端沒有週行事曆，只要更新首頁的時數，不用去畫教練端隱藏的週格線
+        if (currentUser && currentUser.role === 'student') {
+            renderStudentHomeSummary();
+            return;
+        }
 
-        const container = isStudent 
-            ? (document.getElementById('student-calendar-grid') || document.getElementById('dropzone'))
-            : document.getElementById('dropzone');
+        const container = document.getElementById('dropzone');
 
         if (!container) return;
 
@@ -1097,10 +1029,6 @@ export function renderAll() {
         // 1. 收集當週需要繪製的行程
         currentCourses.forEach(course => {
             if (!course) return;
-
-            if (isStudent) {
-                const studentNameMatch = belongsToStudent(course.name, currentUser.name);                if (!studentNameMatch) return; 
-            }
 
             const isException = (dStr) => course.exceptions && course.exceptions.includes(dStr);
 
@@ -1153,35 +1081,29 @@ export function renderAll() {
         });
 
         // 3. 數據統計與 UI 介面更新
-        if (isStudent) {
-            renderStudentHomeSummary();
-        } else {
-            // 👨‍🏫 教練端：計算月度數據並渲染側邊欄
-            if (typeof calculateMonthlyData === 'function') {
-                const monthData = calculateMonthlyData(currentYear, currentMonth);
+        // 👨‍🏫 教練端：計算月度數據並渲染側邊欄
+        if (typeof calculateMonthlyData === 'function') {
+            const monthData = calculateMonthlyData(currentYear, currentMonth);
 
-                const weekTotalEl = document.getElementById('week-total');
-                if (weekTotalEl) weekTotalEl.innerText = (weekTotalMinutes / 60).toFixed(1);
+            const weekTotalEl = document.getElementById('week-total');
+            if (weekTotalEl) weekTotalEl.innerText = (weekTotalMinutes / 60).toFixed(1);
 
-                const monthTotalEl = document.getElementById('month-total');
-                if (monthTotalEl) monthTotalEl.innerText = (monthData.totalMinutes / 60).toFixed(1);
+            const monthTotalEl = document.getElementById('month-total');
+            if (monthTotalEl) monthTotalEl.innerText = (monthData.totalMinutes / 60).toFixed(1);
 
-                const monthIncomeEl = document.getElementById('month-income');
-                if (monthIncomeEl) monthIncomeEl.innerText = Math.round(monthData.totalIncome).toLocaleString();
+            const monthIncomeEl = document.getElementById('month-income');
+            if (monthIncomeEl) monthIncomeEl.innerText = Math.round(monthData.totalIncome).toLocaleString();
 
-                if (typeof renderSidebar === 'function') {
-                    renderSidebar(monthData.studentStats);
-                }
+            if (typeof renderSidebar === 'function') {
+                renderSidebar(monthData.studentStats);
             }
         }
-        if (!isStudent) {
-            renderTodaySchedule();
-            const incomePanel = document.getElementById('panel-income');
-            if (incomePanel && incomePanel.classList.contains('active')) {
-                renderIncomePanel();
-            }
-            maybeScrollCalendarToToday();
+        renderTodaySchedule();
+        const incomePanel = document.getElementById('panel-income');
+        if (incomePanel && incomePanel.classList.contains('active')) {
+            renderIncomePanel();
         }
+        maybeScrollCalendarToToday();
     } catch (error) {
         console.error("❌ renderAll 執行失敗:", error);
     }
@@ -1294,13 +1216,19 @@ window.closeModal = closeModal;
 window.changeWeek = changeWeek;
 window.goToday = goToday;
 window.toggleCustomLoc = toggleCustomLoc;
-window.clearWorkData = clearWorkData;
 window.updateStudentColor = updateStudentColor;
 
 // ------------------------------------------------------------
 // 學生端：課程日曆（月曆格式）
 // ------------------------------------------------------------
 let studentCalendarDate = new Date();
+
+// 登出／登入時把學生端的月曆、圖表狀態歸零，避免沿用上一位使用者停留的月份與年份
+window.resetStudentCalendarState = function () {
+    studentCalendarDate = new Date();
+    chartYear = new Date().getFullYear();
+    courses = [];
+};
 
 function isWorkDayForStudent(studentName, course, dStr) {
     if (dStr < STUDENT_DATA_START) return false;
@@ -1318,7 +1246,7 @@ function findNextClassForStudentHome(studentName) {
     for (let i = 0; i <= 60; i++) {
         const d = new Date(now);
         d.setDate(now.getDate() + i);
-        const dStr = d.toLocaleDateString('en-CA');
+        const dStr = toYMD(d);
         const upcoming = getStudentCoursesOnDate(studentName, dStr)
             .filter(c => new Date(`${dStr}T${c.start}:00`) > now)
             .sort((a, b) => (a.start || '').localeCompare(b.start || ''));
@@ -1326,9 +1254,6 @@ function findNextClassForStudentHome(studentName) {
     }
     return null;
 }
-window.findNextClassForStudentHome = findNextClassForStudentHome;
-
-
 window.findNextClassForStudentHome = findNextClassForStudentHome;
 
 window.changeStudentMonth = function (direction) {
@@ -1362,7 +1287,7 @@ function renderStudentMonthCalendar() {
     const firstDay = new Date(year, month, 1);
     const startOffset = firstDay.getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const todayStr = new Date().toLocaleDateString('en-CA');
+    const now = new Date();
     const weekdayLabels = ['日', '一', '二', '三', '四', '五', '六'];
 
     let html = weekdayLabels.map((w) => `<div class="month-weekday">${w}</div>`).join('');
@@ -1373,10 +1298,12 @@ function renderStudentMonthCalendar() {
 
     for (let day = 1; day <= daysInMonth; day++) {
         const dStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const hasClass = getStudentCoursesOnDate(currentUser.name, dStr).length > 0;
+        const dayCourses = getStudentCoursesOnDate(currentUser.name, dStr);
         let cls = 'month-cell';
-        if (hasClass) {
-            cls += dStr < todayStr ? ' day-done' : ' day-upcoming';
+        if (dayCourses.length > 0) {
+            // 這天所有的課都上完才變灰；只要還有一堂沒上完就維持藍綠色
+            const allDone = dayCourses.every(c => isLessonCompleted(dStr, c.end, now));
+            cls += allDone ? ' day-done' : ' day-upcoming';
         }
         html += `<div class="${cls}" onclick="showStudentDayDetail('${dStr}')">${day}</div>`;
     }
@@ -1396,12 +1323,16 @@ window.showStudentDayDetail = function (dStr) {
         return;
     }
 
-    detailEl.innerHTML = matches.map((c) => `
+    const now = new Date();
+    detailEl.innerHTML = matches.map((c) => {
+        const done = isLessonCompleted(dStr, c.end, now);
+        return `
         <div class="db-row">
             <span class="db-name">${escapeHtmlText(c.name)}</span>
-            <span class="db-meta">${dStr}　⏰ ${escapeHtmlText(c.start)}-${escapeHtmlText(c.end)} · 📍 ${escapeHtmlText(c.loc)}</span>
-        </div>
-    `).join('');
+            <span class="db-meta">${dStr}　⏰ ${escapeHtmlText(c.start)}-${escapeHtmlText(c.end)} · 📍 ${escapeHtmlText(c.loc)}
+                <span class="lesson-status ${done ? 'is-done' : 'is-todo'}">${done ? '已上完' : '未上'}</span></span>
+        </div>`;
+    }).join('');
 };
 
 // ------------------------------------------------------------
@@ -1430,7 +1361,7 @@ function renderTodaySchedule() {
     if (!listEl) return;
 
     const now = new Date();
-    const todayStr = now.toLocaleDateString('en-CA');
+    const todayStr = toYMD(now);
 
     const dateLabelEl = document.getElementById('overview-today-date');
     if (dateLabelEl) {
@@ -1465,15 +1396,13 @@ function getStudentLessonDetails(studentName, startStr, endStr, matchBase = fals
             (matchBase ? belongsToStudent(c.name, studentName) : c.name === studentName));
 
     const now = new Date();
-    const todayStr = now.toLocaleDateString('en-CA');
-    const nowTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     const results = [];
     const cursor = new Date(`${startStr}T00:00:00`);
     const last = new Date(`${endStr}T00:00:00`);
 
     while (cursor <= last) {
-        const dStr = cursor.toLocaleDateString('en-CA');
+        const dStr = toYMD(cursor);
         studentCourses.forEach(c => {
             if (!courseOccursOnDate(c, dStr)) return;
             const minutes = getCourseDurationMinutes(c);
@@ -1486,7 +1415,7 @@ function getStudentLessonDetails(studentName, startStr, endStr, matchBase = fals
                 loc: c.loc,
                 minutes,
                 money: (minutes / 60) * rate,
-                completed: dStr < todayStr || (dStr === todayStr && (c.end || '') <= nowTime)
+                completed: isLessonCompleted(dStr, c.end, now)
             });
         });
         cursor.setDate(cursor.getDate() + 1);
@@ -1919,7 +1848,7 @@ function maybeScrollCalendarToToday() {
 
     calendarNeedsScrollToToday = false;
 
-    const todayStr = new Date().toLocaleDateString('en-CA');
+    const todayStr = toYMD(new Date());
     const header = Array.from(document.querySelectorAll('#main-app .day-header'))
         .find((h) => h.dataset.fullDate === todayStr);
     if (!header) { container.scrollLeft = 0; return; }   // 這週沒有今天（翻到別週）→ 回到最左邊
