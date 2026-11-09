@@ -181,6 +181,14 @@
                         <button type="button" class="overview-save-btn" onclick="savePaymentSettings()">儲存收款資訊</button>
                     </div>
 
+                    <div class="maintenance-card">
+                        <h3 class="panel-subtitle">🛠️ 資料維護</h3>
+                        <p class="maintenance-desc">替既有的課程與收款紀錄補上「學生基本姓名」欄位，並把帶括號的學生帳號（例如「學生D(個別)」）改綁到不含括號的姓名。學生端和 Firestore 規則都靠這些判斷哪些資料是誰的，<b>更新規則前請先按一次</b>。重複按沒有影響。</p>
+                        <p class="maintenance-hint" id="maintenance-hint"></p>
+                        <button type="button" class="overview-save-btn" id="maintenance-btn" onclick="backfillStudentBase()">補齊既有資料</button>
+                        <p class="maintenance-result" id="maintenance-result"></p>
+                    </div>
+
                     
                 </div>
             </div>

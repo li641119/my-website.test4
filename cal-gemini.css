@@ -3253,3 +3253,16 @@ html {
 }
 .lesson-status.is-done { background: #eceff1; color: #78909c; }
 .lesson-status.is-todo { background: #e0f2f1; color: #00796b; }
+
+/* 教練總覽：資料維護卡片 */
+.maintenance-card {
+    background: #fff;
+    border: 1px solid #eaedf1;
+    border-radius: 12px;
+    padding: 4px 20px 20px;
+    margin-top: 24px;
+}
+.maintenance-desc { margin: 0 0 8px; font-size: 13px; line-height: 1.6; color: #7f8c8d; }
+.maintenance-hint { margin: 0 0 12px; font-size: 14px; font-weight: 600; color: #2c3e50; }
+.maintenance-result { margin: 12px 0 0; font-size: 13px; line-height: 1.6; color: #2e7d32; word-break: break-all; }
+

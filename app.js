@@ -4,7 +4,8 @@
 // Firebase imports
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
 import { 
-    getFirestore, collection, query, where, getDocs, onSnapshot, setDoc, doc, deleteDoc, getDoc, 
+    getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+    collection, query, where, getDocs, onSnapshot, setDoc, doc, deleteDoc, getDoc, 
 } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { 
     getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, 
@@ -25,7 +26,17 @@ const firebaseConfig = {
 
 // db, auth
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// 開啟本機快取：球館訊號不好時，仍看得到上次載入的資料（無法啟用時自動退回一般模式）
+const db = (() => {
+    try {
+        return initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+        });
+    } catch (err) {
+        console.warn('離線快取無法啟用，改用一般模式:', err);
+        return getFirestore(app);
+    }
+})();
 const auth = getAuth(app);
 
 setPersistence(auth, browserSessionPersistence)
@@ -82,11 +93,8 @@ if (registerForm) {
         try {
             cred = await createUserWithEmailAndPassword(auth, email, password);
 
-            const existingSnap = await getDoc(doc(db, "students", name));
-            const existingData = existingSnap.exists() ? existingSnap.data() : {};
-            const patch = { email: email };
-        
-            await setDoc(doc(db, "students", name), patch, { merge: true });
+            // 把這個 Email 綁到這個姓名。若這個姓名已被別的帳號綁走，Firestore 規則會拒絕（permission-denied）
+            await setDoc(doc(db, "students", name), { email: email, isStudent: true }, { merge: true });
             await signOut(auth);
 
             registerForm.reset();
@@ -98,7 +106,10 @@ if (registerForm) {
             console.error("註冊失敗:", error.code || error);
 
             if (cred) {
-                try { await signOut(auth); } catch (_) { /* 忽略 */ }
+                // 帳號已建好但姓名綁定失敗：把這個空帳號刪掉，學生才能用同一個 Email 重新註冊
+                try { await cred.user.delete(); } catch (_) {
+                    try { await signOut(auth); } catch (_2) { /* 忽略 */ }
+                }
             }
 
             const map = {
@@ -106,6 +117,7 @@ if (registerForm) {
                 'auth/invalid-email': 'Email 格式不正確',
                 'auth/weak-password': '密碼至少需要 6 個字元',
                 'auth/network-request-failed': '網路連線異常，請檢查網路',
+                'permission-denied': '這個姓名已經被其他帳號綁定了。請確認姓名是否正確，或聯絡教練。',
             };
             errorMsg.textContent = map[error.code] || ('註冊失敗：' + error.message);
         } finally {
@@ -289,10 +301,12 @@ onAuthStateChanged(auth, async (user) => {
             startStudentPaymentWatchers(studentName);
             watchOverviewForStudent();
 
+            updateOfflineBanner();
             if (!studentName) {
                 showStudentBanner(lookupFailed
                     ? '學生資料讀取失敗，請檢查網路後重新整理頁面。'
-                    : '找不到你的學生資料。請聯絡教練，確認你註冊時填的姓名與教練登記的是否一致。');
+                    : '找不到你的學生資料。請聯絡教練，確認你註冊時填的姓名與教練登記的是否一致。',
+                    lookupFailed ? 'error' : 'notfound');
             }
         }
 
@@ -628,6 +642,90 @@ window.renderOverviewPanel = function () {
         window.renderTodaySchedule();
     }
     loadPaymentSettingsEditor();
+    updateMaintenanceHint();
+};
+
+// ------------------------------------------------------------
+// 資料維護：補齊既有課程、收款紀錄的「學生基本姓名」欄位（studentBase）。
+// 學生端用這個欄位精確比對，Firestore 規則也靠它判斷「這筆是不是你的」。
+// ------------------------------------------------------------
+function updateMaintenanceHint() {
+    const el = document.getElementById('maintenance-hint');
+    if (!el) return;
+    const missing = (window.courses || []).filter((c) => c && c.name && !c.studentBase).length;
+    el.innerText = missing > 0
+        ? `目前有 ${missing} 筆課程需要補齊（補齊前，學生端看不到這些課程）。`
+        : '課程資料都已補齊 ✅（收款紀錄請按下面的按鈕一起檢查）';
+}
+
+window.backfillStudentBase = async function () {
+    if (!currentUser || currentUser.role !== 'coach') return;
+    const resultEl = document.getElementById('maintenance-result');
+    const btn = document.getElementById('maintenance-btn');
+    const setMsg = (t) => { if (resultEl) resultEl.innerText = t; };
+    if (btn) btn.disabled = true;
+    setMsg('補齊中，請稍候…');
+
+    const fix = async (colName, nameField) => {
+        const snap = await getDocs(collection(db, colName));
+        const todo = [];
+        let alreadyOk = 0, noName = 0;
+        snap.forEach((d) => {
+            const x = d.data();
+            if (x.studentBase) { alreadyOk++; return; }
+            if (!x[nameField]) { noName++; return; }
+            todo.push({ id: d.id, base: window.baseStudentName(x[nameField]) });
+        });
+        let patched = 0, failed = 0;
+        for (const t of todo) {
+            try { await setDoc(doc(db, colName, t.id), { studentBase: t.base }, { merge: true }); patched++; }
+            catch (err) { failed++; console.error(`補齊 ${colName}/${t.id} 失敗:`, err); }
+        }
+        return { total: snap.size, patched, alreadyOk, noName, failed };
+    };
+
+    // 學生帳號：文件 ID 帶括號、而且已經綁了 Email 的舊帳號（例如「學生D(個別)」），
+    // 在新規則下找不到對應的基本姓名文件，會讀不到任何資料。這裡把它們改綁到不含括號的姓名。
+    const fixStudents = async () => {
+        const snap = await getDocs(collection(db, 'students'));
+        const byId = new Map();
+        snap.forEach((d) => byId.set(d.id, d.data()));
+        let moved = 0;
+        const conflicts = [];
+        for (const [id, x] of byId) {
+            if (!x.email) continue;
+            const base = window.baseStudentName(id);
+            if (base === id) continue;
+            const target = byId.get(base);
+            if (target && target.email && target.email !== x.email) {
+                conflicts.push(`${id}（「${base}」已經綁了另一個 Email）`);
+                continue;
+            }
+            try {
+                await setDoc(doc(db, 'students', base), { email: x.email, isStudent: true }, { merge: true });
+                await setDoc(doc(db, 'students', id), { email: '' }, { merge: true });   // 舊文件解除綁定，登入時才不會查到兩份
+                moved++;
+            } catch (err) {
+                console.error(`改綁學生帳號 ${id} 失敗:`, err);
+                conflicts.push(`${id}（寫入失敗）`);
+            }
+        }
+        return { moved, conflicts };
+    };
+
+    try {
+        const st = await fixStudents();
+        const ev = await fix('events', 'name');
+        const inc = await fix('incomeRecords', 'studentName');
+        const fmt = (label, r) => `${label} ${r.total} 筆：補齊 ${r.patched}、原本就有 ${r.alreadyOk}${r.noName ? `、缺姓名略過 ${r.noName}` : ''}${r.failed ? `、失敗 ${r.failed}` : ''}`;
+        setMsg(`完成。${fmt('課程', ev)}；${fmt('收款紀錄', inc)}；學生帳號 ${st.moved} 個已改綁到不含括號的姓名${st.conflicts.length ? `。需要你手動處理：${st.conflicts.join('、')}` : ''}`);
+    } catch (err) {
+        console.error('補齊失敗:', err);
+        setMsg('補齊失敗：' + (err && err.message ? err.message : err));
+    } finally {
+        if (btn) btn.disabled = false;
+        updateMaintenanceHint();
+    }
 };
 
 // 收入數字的模糊/顯示切換（跟側邊欄那個是同一套邏輯，另外獨立一份給總覽頁用）
@@ -762,7 +860,8 @@ window.uploadEvent = async (eventData) => {
         const finalPayload = {
             ...eventData,
             price: currentPrice,
-            studentEmail: emailToUpload
+            studentEmail: emailToUpload,
+            studentBase: window.baseStudentName(eventData.name)   // 學生端與 Firestore 規則用它判斷「這堂課是誰的」
         };
 
         await setDoc(doc(db, "events", eventId), finalPayload);
@@ -825,6 +924,7 @@ function startLiveSync() {
         const overviewPanel = document.getElementById('panel-overview');
         if (overviewPanel && overviewPanel.classList.contains('active')) {
             renderOverviewStats();
+            updateMaintenanceHint();
         }
                 
         // 📊 同步更新左側 Sidebar 的統計數據與時數
@@ -854,7 +954,7 @@ function renderStudentNextClassCard() {
     const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
     const loc = next.course.loc ? ` @ ${next.course.loc}` : '';
     const label = (typeof window.courseTypeLabel === 'function') ? window.courseTypeLabel(next.course.name) : '';
-    el.innerText = `${d.getMonth() + 1}/${d.getDate()} (${weekDays[d.getDay()]}) ${next.course.start} - ${next.course.end}${loc}${label ? `（${label}）` : ''}`;
+    el.innerText = `${d.getMonth() + 1}/${d.getDate()} (${weekDays[d.getDay()]}) ${next.course.start} - ${next.course.end}${loc}${label ? `（${label}）` : ''}${next.ongoing ? ' · 上課中' : ''}`;
 }
 
 
@@ -908,11 +1008,12 @@ function resetStudentView() {
     document.querySelectorAll('.student-panel').forEach((pn) =>
         pn.classList.toggle('active', pn.dataset.panelId === 'panel-student-home'));
 
-    showStudentBanner('');
+    clearStudentBanner();
 }
 
-// 學生首頁最上方的提示條（找不到學生資料、資料讀取失敗時顯示）；傳空字串就移除
-function showStudentBanner(text) {
+// 學生首頁最上方的提示條。kind：'error'（讀取失敗）、'notfound'（找不到學生資料）、'offline'（離線）。
+// 傳空字串就移除。
+function showStudentBanner(text, kind = 'error') {
     let el = document.getElementById('student-banner');
     if (!text) { if (el) el.remove(); return; }
     if (!el) {
@@ -923,8 +1024,25 @@ function showStudentBanner(text) {
         el.className = 'student-banner';
         host.insertBefore(el, host.firstChild);
     }
+    el.dataset.kind = kind;
     el.innerText = text;
 }
+
+// 只清掉指定種類的提示（kind 省略就全部清掉）
+function clearStudentBanner(kind) {
+    const el = document.getElementById('student-banner');
+    if (!el) return;
+    if (!kind || el.dataset.kind === kind) el.remove();
+}
+
+// 離線時提醒學生「畫面上是上次載入的資料」；恢復連線就自動收起
+function updateOfflineBanner() {
+    if (!currentUser || currentUser.role !== 'student') return;
+    if (navigator.onLine === false) showStudentBanner('目前沒有網路連線，畫面上是上次載入的資料。', 'offline');
+    else clearStudentBanner('offline');
+}
+window.addEventListener('offline', updateOfflineBanner);
+window.addEventListener('online', updateOfflineBanner);
 
 // ------------------------------------------------------------
 // 學生端：時間到了自動更新（上完課變灰、下次上課換下一堂、跨日重算）
@@ -987,15 +1105,16 @@ function startStudentLiveSync(studentName) {
 
     if (!studentName) {
         if (window.updateCalendarUI) window.updateCalendarUI([]);
+        // 沒有對應的學生資料：把「讀取中」改成明確的空狀態，避免學生以為是網路慢、一直在等
+        const nextEl = document.getElementById('student-next-class');
+        if (nextEl) nextEl.innerText = '—';
+        const statusEl = document.getElementById('student-payment-status');
+        if (statusEl) { statusEl.innerText = '—'; statusEl.style.color = '#90a4ae'; }
         return;
     }
 
     const baseName = window.baseStudentName(studentName);
-    const q = query(
-        collection(db, "events"),
-        where("name", ">=", baseName),
-        where("name", "<=", baseName + "\uf8ff")
-    );
+    const q = query(collection(db, "events"), where("studentBase", "==", baseName));
 
     unsubscribe = onSnapshot(q, (snapshot) => {
         const myEvents = [];
@@ -1006,7 +1125,7 @@ function startStudentLiveSync(studentName) {
             myEvents.push({ ...data, id: data.id ? data.id.toString() : docSnap.id });
         });
 
-        showStudentBanner('');   // 讀取成功，清掉之前的錯誤提示
+        clearStudentBanner('error');   // 讀取成功，清掉之前的讀取失敗提示
 
         if (window.updateCalendarUI) {
             window.updateCalendarUI(myEvents);
@@ -1025,7 +1144,7 @@ function startStudentLiveSync(studentName) {
         scheduleStudentTimeRefresh();
     }, (err) => {
         console.error('讀取課表失敗:', err);
-        showStudentBanner('課表讀取失敗，請檢查網路後重新整理頁面。');
+        showStudentBanner('課表讀取失敗，請檢查網路後重新整理頁面。', 'error');
     });
 }
 
@@ -1050,6 +1169,7 @@ window.setIncomePaidStatus = async function (year, month, studentName, isPaid) {
                 year: year,
                 month: month + 1,
                 studentName: studentName,
+                studentBase: window.baseStudentName(studentName),
                 isPaid: isPaid,
                 updatedAt: new Date().toISOString()
             },
@@ -1319,6 +1439,9 @@ let paySettings = {};
 let payCoachReports = {};
 let payStudentReports = {};
 let payStudentIncomeMap = {};
+let paySettingsError = false;   // 收款資訊讀取失敗
+let payIncomeError = false;     // 收款紀錄讀取失敗
+let payReportError = false;     // 匯款回報讀取失敗
 let payUnsubCoach = null;
 let payUnsubStudent = [];
 let payQrDraft = { 1: null, 2: null };
@@ -1622,6 +1745,7 @@ function stopStudentPaymentWatchers() {
     payUnsubStudent = [];
     payStudentReports = {};
     payStudentIncomeMap = {};
+    paySettingsError = payIncomeError = payReportError = false;
 }
 
 function startStudentPaymentWatchers(studentName) {
@@ -1629,11 +1753,9 @@ function startStudentPaymentWatchers(studentName) {
     if (!studentName) return;
     const base = window.baseStudentName(studentName);
 
-    // 收款紀錄：用名字開頭查詢，連同舊的「學生A(個別)」這種以完整名稱記錄的紀錄一起抓回來
+    // 收款紀錄：用 studentBase 查詢，連同舊的「學生A(個別)」這種以完整名稱記錄的紀錄一起抓回來
     payUnsubStudent.push(onSnapshot(
-        query(collection(db, 'incomeRecords'),
-            where('studentName', '>=', base),
-            where('studentName', '<=', base + '\uf8ff')),
+        query(collection(db, 'incomeRecords'), where('studentBase', '==', base)),
         (snap) => {
             const map = {};
             snap.forEach((d) => {
@@ -1642,9 +1764,10 @@ function startStudentPaymentWatchers(studentName) {
                 map[`${x.year}-${x.month}-${x.studentName}`] = x.isPaid === true;
             });
             payStudentIncomeMap = map;
+            payIncomeError = false;
             refreshStudentPaymentViews();
         },
-        (err) => console.error('監聽繳費狀態失敗:', err)
+        (err) => { console.error('監聽繳費狀態失敗:', err); payIncomeError = true; refreshStudentPaymentViews(); }
     ));
 
     payUnsubStudent.push(onSnapshot(
@@ -1656,18 +1779,20 @@ function startStudentPaymentWatchers(studentName) {
                 reports[payMonthKey(x.year, x.month - 1)] = x;
             });
             payStudentReports = reports;
+            payReportError = false;
             refreshStudentPaymentViews();
         },
-        (err) => console.error('監聽匯款回報失敗:', err)
+        (err) => { console.error('監聽匯款回報失敗:', err); payReportError = true; refreshStudentPaymentViews(); }
     ));
 
     payUnsubStudent.push(onSnapshot(
         doc(db, 'settings', 'payment'),
         (snap) => {
             paySettings = snap.exists() ? snap.data() : {};
+            paySettingsError = false;
             refreshStudentPaymentViews();
         },
-        (err) => console.error('監聽收款資訊失敗:', err)
+        (err) => { console.error('監聽收款資訊失敗:', err); paySettingsError = true; refreshStudentPaymentViews(); }
     ));
 }
 
@@ -1705,6 +1830,7 @@ function updateHomePaymentCard() {
     const report = payStudentReports[key];
 
     if (!coursesReady) { set('讀取中…', '#90a4ae'); return; }
+    if (payIncomeError || payReportError) { set('無法讀取', '#90a4ae'); return; }   // 讀不到就誠實說讀不到，不要顯示成「未繳費」
     if (isStudentMonthPaid(year, monthIdx)) { set('已繳費', '#2e7d32'); return; }
     if (report && report.status === 'reported') { set('已回報，待確認', '#e67e22'); return; }
     if (coursesReady && amount <= 0) { set('本月無費用', '#7f8c8d'); return; }
@@ -1765,7 +1891,10 @@ function renderPayMethodHtml(amount) {
     const qrs = [s.qr1, s.qr2].filter((q) => q && q.dataUrl);
 
     if (accounts.length === 0 && qrs.length === 0) {
-        return `<div class="pay-card"><p class="no-data-hint">教練尚未設定收款資訊，請直接聯繫教練。</p></div>`;
+        const msg = paySettingsError
+            ? '收款資訊暫時無法讀取，請稍後再試，或直接聯繫教練。'
+            : '教練尚未設定收款資訊，請直接聯繫教練。';
+        return `<div class="pay-card"><p class="no-data-hint">${msg}</p></div>`;
     }
 
     let html = '';
@@ -1885,6 +2014,12 @@ function renderStudentPayPanel() {
         if (reportEl) reportEl.innerHTML = '';
         return;
     }
+    if (payIncomeError || payReportError) {
+        setPayBanner('none', '繳費狀態暫時無法讀取，請稍後再試。');
+        if (methodEl) methodEl.innerHTML = renderPayMethodHtml(amount);
+        if (reportEl) reportEl.innerHTML = '';
+        return;
+    }
     if (paid) {
         setPayBanner('paid', '✅ 已繳費<br><small>教練已確認收款，謝謝！</small>');
         if (methodEl) methodEl.innerHTML = '';
@@ -1951,7 +2086,9 @@ window.submitPaymentReport = async function () {
         document.getElementById('report-done-state').classList.remove('hide');
     } catch (err) {
         console.error('送出回報失敗:', err);
-        errEl.textContent = '送出失敗，請稍後再試';
+        errEl.textContent = (err && err.code === 'permission-denied')
+            ? '送出失敗：沒有權限。請聯絡教練確認你的帳號資料。'
+            : (navigator.onLine === false ? '目前沒有網路，請連線後再送出。' : '送出失敗，請稍後再試。');
     } finally {
         submitBtn.disabled = false;
     }

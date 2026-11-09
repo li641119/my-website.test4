@@ -1247,10 +1247,20 @@ function findNextClassForStudentHome(studentName) {
         const d = new Date(now);
         d.setDate(now.getDate() + i);
         const dStr = toYMD(d);
-        const upcoming = getStudentCoursesOnDate(studentName, dStr)
-            .filter(c => new Date(`${dStr}T${c.start}:00`) > now)
-            .sort((a, b) => (a.start || '').localeCompare(b.start || ''));
-        if (upcoming.length > 0) return { dateStr: dStr, course: upcoming[0] };
+        const lessons = getStudentCoursesOnDate(studentName, dStr)
+            .filter(c => c.start)
+            .sort((a, b) => a.start.localeCompare(b.start));
+
+        // 今天正在上的課（開始了、還沒下課）優先顯示，並標示「上課中」
+        if (i === 0) {
+            const ongoing = lessons.find(c => c.end
+                && new Date(`${dStr}T${c.start}:00`) <= now
+                && now < new Date(`${dStr}T${c.end}:00`));
+            if (ongoing) return { dateStr: dStr, course: ongoing, ongoing: true };
+        }
+
+        const upcoming = lessons.filter(c => new Date(`${dStr}T${c.start}:00`) > now);
+        if (upcoming.length > 0) return { dateStr: dStr, course: upcoming[0], ongoing: false };
     }
     return null;
 }
