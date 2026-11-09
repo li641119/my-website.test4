@@ -73,10 +73,10 @@
 <!--coach view-->
     <div id="coach-view" class="hide">
         <aside class="coach-nav">
-            <button type="button" class="coach-nav-btn active" data-panel="panel-overview">📊 資訊總覽</button>
-            <button type="button" class="coach-nav-btn" data-panel="panel-calendar">📅 課程日曆</button>
-            <button type="button" class="coach-nav-btn" data-panel="panel-students">👥 學生資訊</button>
-            <button type="button" class="coach-nav-btn" data-panel="panel-income">💰 財務報表</button>
+            <button type="button" class="coach-nav-btn active" data-panel="panel-overview">資訊總覽</button>
+            <button type="button" class="coach-nav-btn" data-panel="panel-calendar">課程日曆</button>
+            <button type="button" class="coach-nav-btn" data-panel="panel-students">學生資訊</button>
+            <button type="button" class="coach-nav-btn" data-panel="panel-income">財務報表</button>
             <button type="button" class="coach-nav-btn" id="logout-btn">登出</button>
         </aside>
 
@@ -460,10 +460,10 @@
     <div id="student-view" style="display: none;">
         <!-- 置頂分頁 -->
         <div class="student-nav">
-            <button type="button" class="student-nav-btn active" data-panel="panel-student-home">🏠 首頁</button>
-            <button type="button" class="student-nav-btn" data-panel="panel-student-calendar">📅 課程日曆</button>
-            <button type="button" class="student-nav-btn" data-panel="panel-student-history">💰 上課紀錄</button>
-            <button type="button" class="student-nav-btn" data-panel="panel-student-pay">💳 前往繳費</button>
+            <button type="button" class="student-nav-btn active" data-panel="panel-student-home">首頁</button>
+            <button type="button" class="student-nav-btn" data-panel="panel-student-calendar">課程日曆</button>
+            <button type="button" class="student-nav-btn" data-panel="panel-student-history">上課紀錄</button>
+            <button type="button" class="student-nav-btn" data-panel="panel-student-pay">前往繳費</button>
             <button type="button" class="student-nav-btn" id="student-logout-btn">登出</button>
         </div>
 
@@ -495,27 +495,24 @@
                             
                     </div>   
                         
-                    <h3 style="margin: 16px 0; font-size: 16px; line-height: 1.5; color: #586773;">💰 課程與費用</h3>
-
                     <div class="student-pay-card">
                         <span>本月繳費情形</span>
                         <span class="stat-value" id="student-payment-status" style="font-size:16px; color: #d32f2f;">未繳費</span>
                     </div>
+                </div>
 
-                    <div class="student-next-card">
-                        <span>下次上課</span>
-                        <span class="stat-value" id="student-next-class" style="font-size:16px;">讀取中...</span>
-                    </div>
-                    
+                <div class="student-next-card">
+                    <span>下次上課</span>
+                    <span class="stat-value" id="student-next-class">讀取中...</span>
                 </div>
 
                 <div class="student-notice-card">
-                    <h3>📢 停課公告</h3>
-                    <div id="student-notice-content">讀取中...</div>
+                    <span>停課公告</span>
+                    <div class="stat-value" id="student-notice-content">讀取中...</div>
                 </div>
 
                 <div class="student-slots-card">
-                    <h3>🗓️ 下週可預約時段</h3>
+                    <span>下週可預約時段</span>
                     <div id="student-slots-content">讀取中...</div>
                 </div>
             </div>
@@ -528,9 +525,9 @@
                 <!-- 左側：月曆 -->
                 <div class="calendar-col">
                     <div class="month-calendar-header">
-                        <button type="button" onclick="changeStudentMonth(-1)">⬅️</button>
+                        <button type="button" onclick="changeStudentMonth(-1)">◀</button>
                         <h3 id="student-month-label">讀取中...</h3>
-                        <button type="button" onclick="changeStudentMonth(1)">➡️</button>
+                        <button type="button" onclick="changeStudentMonth(1)">▶</button>
                     </div>
                     
                     <div class="month-calendar-grid" id="student-month-grid"></div>
@@ -540,7 +537,6 @@
                 <div class="month-day-detail" id="student-day-detail">
                     <div class="no-data-hint">點選上面有標色的日期查看上課細節</div>
                     <div class="no-data-hint">灰色=已完成課程，藍綠色=未完成課程</div>
-
                 </div>
 
             </div>
@@ -552,11 +548,11 @@
                 <h2 class="panel-subtitle">📈 學習歷程</h2>
                 <div class="progress-chart-card">
                     <div class="year-switcher">
-                        <button type="button" id="chart-year-prev" onclick="changeChartYear(-1)">⬅️</button>
+                        <button type="button" id="chart-year-prev" onclick="changeChartYear(-1)">◀</button>
                         <span id="chart-year-label"></span>
-                        <button type="button" id="chart-year-next" onclick="changeChartYear(1)">➡️</button>
-                        <span id="chart-year-total" class="chart-year-total"></span>
+                        <button type="button" id="chart-year-next" onclick="changeChartYear(1)">▶</button>
                     </div>
+                    <span id="chart-year-total" class="chart-year-total"></span>
                     <div id="progress-chart"></div>
                 </div>
 

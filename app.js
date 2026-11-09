@@ -53,9 +53,12 @@ if (registerForm) {
     registerForm.addEventListener('submit', async (e) => {
         e.preventDefault();
 
-        const name = document.getElementById('register-name').value.trim();
-        const email = document.getElementById('register-email').value.trim();
-        const password = document.getElementById('register-password').value;
+        const typedName = document.getElementById('register-name').value.trim();
+        // 學生就算打成「學生A(個別)」，也一律綁定到「學生A」
+        const name = (typeof window.baseStudentName === 'function')
+            ? window.baseStudentName(typedName)
+            : typedName;
+        const email = document.getElementById('register-email').value.trim().toLowerCase();        const password = document.getElementById('register-password').value;
         const confirm = document.getElementById('register-confirm').value;
         const errorMsg = document.getElementById('register-error');
         errorMsg.textContent = '';
@@ -83,6 +86,7 @@ if (registerForm) {
             const existingData = existingSnap.exists() ? existingSnap.data() : {};
             const patch = { email: email };
         
+            console.log('輸入的:', email, '/ 帳號的:', cred.user.email);
             await setDoc(doc(db, "students", name), patch, { merge: true });
             await signOut(auth);
 
@@ -813,8 +817,6 @@ function startLiveSync() {
     });
 }
 
-
-
 function renderStudentNextClassCard() {
     if (!currentUser || currentUser.role !== 'student' || !currentUser.name) return;
     const el = document.getElementById('student-next-class');
@@ -832,7 +834,8 @@ function renderStudentNextClassCard() {
     const d = new Date(`${next.dateStr}T00:00:00`);
     const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
     const loc = next.course.loc ? ` @ ${next.course.loc}` : '';
-    el.innerText = `${d.getMonth() + 1}/${d.getDate()} (${weekDays[d.getDay()]}) ${next.course.start} - ${next.course.end}${loc}`;
+    const label = (typeof window.courseTypeLabel === 'function') ? window.courseTypeLabel(next.course.name) : '';
+    el.innerText = `${d.getMonth() + 1}/${d.getDate()} (${weekDays[d.getDay()]}) ${next.course.start} - ${next.course.end}${loc}${label ? `（${label}）` : ''}`;
 }
 
 
@@ -846,9 +849,11 @@ function startStudentLiveSync(studentName) {
         return;
     }
 
+    const baseName = window.baseStudentName(studentName);
     const q = query(
-        collection(db, "events"), 
-        where("name", "==", studentName)
+        collection(db, "events"),
+        where("name", ">=", baseName),
+        where("name", "<=", baseName + "\uf8ff")
     );
     
     unsubscribe = onSnapshot(q, (snapshot) => {
@@ -856,6 +861,7 @@ function startStudentLiveSync(studentName) {
 
         snapshot.forEach((docSnap) => {
             const data = docSnap.data();
+            if (!window.belongsToStudent(data.name, studentName)) return;   // 名字開頭相同但不是同一個人（例如「王小明明」）
             myEvents.push({ ...data, id: data.id ? data.id.toString() : docSnap.id });
         });
 
@@ -1050,15 +1056,6 @@ navBtns.forEach((btn) => {
                 window.renderOverviewPanel();
             }
         }
-
-
-        if (
-            targetPanelId === 'panel-overview' &&
-            typeof window.renderCoachOverview === 'function'
-        ) {
-            window.renderCoachOverview();
-        }
-
     });
 
 });
@@ -1088,8 +1085,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// 學生自己查詢上課紀錄：邏輯跟教練端的 queryStudentHistory 一樣，
-// 差別只在不用選學生，自動用自己的名字
 window.queryMyHistory = function () {
     if (!currentUser || !currentUser.name) return;
 
@@ -1133,239 +1128,26 @@ window.queryMyHistory = function () {
     const fmt = (b) =>
         `<strong>${b.count}</strong> 堂（${window.formatHours(b.minutes)} 小時），$${Math.round(b.money).toLocaleString()}`;
 
+    // 同一位學生有兩種以上課別（例如個別、團體）時，另外列出每一種各自的數字
+    let breakdownHtml = '';
+    const names = Object.keys(s.byName || {}).sort();
+    if (names.length > 1) {
+        breakdownHtml = `<div class="history-breakdown">` + names.map((n) => {
+            const b = s.byName[n];
+            return `
+                <div class="history-breakdown-row">
+                    <span class="history-breakdown-name">${payEscape(n)}</span>
+                    <span>已上完 ${b.completed.count} 堂（${window.formatHours(b.completed.minutes)} 小時，$${Math.round(b.completed.money).toLocaleString()}）</span>
+                    <span class="history-breakdown-sched">預定 ${b.scheduled.count} 堂（$${Math.round(b.scheduled.money).toLocaleString()}）</span>
+                </div>`;
+        }).join('') + `</div>`;
+    }
+
     resultEl.innerHTML = `
         <div class="history-result-row"><span class="history-tag history-tag-done">已上完</span>${fmt(s.completed)}</div>
         <div class="history-result-row"><span class="history-tag history-tag-sched">預定（含已上完）</span>${fmt(s.scheduled)}</div>
+        ${breakdownHtml}
         ${noteHtml}`;
-};
-
-window.renderCoachOverview = function () {
-
-    const currentCourses =
-        window.courses || [];
-
-    const now = new Date();
-
-    const year =
-        now.getFullYear();
-
-    const month =
-        now.getMonth();
-
-    const today =
-        new Date(
-            year,
-            month,
-            now.getDate()
-        );
-
-    const day =
-        today.getDay();
-
-    const mondayOffset =
-        day === 0 ? -6 : 1 - day;
-
-    const monday =
-        new Date(today);
-
-    monday.setDate(
-        today.getDate() + mondayOffset
-    );
-
-    monday.setHours(0, 0, 0, 0);
-
-    const sunday =
-        new Date(monday);
-
-    sunday.setDate(
-        monday.getDate() + 6
-    );
-
-    sunday.setHours(
-        23,
-        59,
-        59,
-        999
-    );
-
-
-    let weekCount = 0;
-    let monthCount = 0;
-
-    const monthData =
-        typeof window.calculateMonthlyData === 'function'
-            ? window.calculateMonthlyData(
-                year,
-                month
-            )
-            : {
-                totalMinutes: 0,
-                totalIncome: 0
-            };
-
-
-    currentCourses.forEach(course => {
-
-        if (
-            !course ||
-            course.type !== 'work'
-        ) {
-            return;
-        }
-
-        if (
-            course.isRepeating &&
-            course.day
-        ) {
-
-            // 本週
-            for (
-                let i = 0;
-                i < 7;
-                i++
-            ) {
-
-                const date =
-                    new Date(monday);
-
-                date.setDate(
-                    monday.getDate() + i
-                );
-
-                const targetDay =
-                    course.day === "8"
-                        ? 0
-                        : parseInt(
-                            course.day,
-                            10
-                        ) - 1;
-
-                if (
-                    date.getDay() === targetDay
-                ) {
-
-                    const dateStr =
-                        date.toLocaleDateString(
-                            'en-CA'
-                        );
-
-                    const exceptionList =
-                        course.exceptions || [];
-
-                    if (
-                        !exceptionList.includes(
-                            dateStr
-                        )
-                    ) {
-
-                        if (
-                            !course.date ||
-                            dateStr >= course.date
-                        ) {
-                            weekCount++;
-                        }
-
-                    }
-
-                }
-
-            }
-
-        }
-
-
-        else if (course.date) {
-
-            const courseDate =
-                new Date(
-                    `${course.date}T00:00:00`
-                );
-
-            if (
-                courseDate >= monday &&
-                courseDate <= sunday
-            ) {
-                weekCount++;
-            }
-
-        }
-
-
-        if (
-            typeof window.calculateMonthlyData === 'function'
-        ) {
-
-            
-            const stats =
-                monthData.studentStats;
-
-            if (
-                stats &&
-                stats[course.name]
-            ) {
-                
-            }
-
-        }
-
-    });
-
-
-    Object.values(
-        monthData.studentStats || {}
-    ).forEach(data => {
-
-        monthCount +=
-            Number(data.occurrences || 0);
-
-    });
-
-
-    const weekCountEl =
-        document.getElementById(
-            'overview-week-count'
-        );
-
-    const monthCountEl =
-        document.getElementById(
-            'overview-month-count'
-        );
-
-    const monthHoursEl =
-        document.getElementById(
-            'overview-month-hours'
-        );
-
-    const monthIncomeEl =
-        document.getElementById(
-            'overview-month-income'
-        );
-
-
-    if (weekCountEl) {
-        weekCountEl.innerText =
-            weekCount;
-    }
-
-    if (monthCountEl) {
-        monthCountEl.innerText =
-            monthCount;
-    }
-
-    if (monthHoursEl) {
-        monthHoursEl.innerText =
-            `${(
-                monthData.totalMinutes / 60
-            ).toFixed(1)} 小時`;
-    }
-
-    if (monthIncomeEl) {
-        monthIncomeEl.innerText =
-            `$${Math.round(
-                monthData.totalIncome
-            ).toLocaleString()}`;
-    }
-
 };
 
 // 學生端：只在整個學生區塊的最底下放一行起算提示（不放進任何分頁裡，避免影響各頁版面），
@@ -1426,7 +1208,7 @@ console.log("Firebase 監聽器已啟動");
 let paySettings = {};
 let payCoachReports = {};
 let payStudentReports = {};
-let payStudentPaidMonths = {};
+let payStudentIncomeMap = {};
 let payUnsubCoach = null;
 let payUnsubStudent = [];
 let payQrDraft = { 1: null, 2: null };
@@ -1438,6 +1220,16 @@ function payEscape(text) {
     return String(text ?? '').replace(/[&<>"']/g, ch => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     }[ch]));
+}
+function payBaseName() {
+    return window.baseStudentName(currentUser.name);
+}
+
+// 這個月是否已繳費：以基本姓名的收款紀錄為準；沒有的話看舊的、以完整名稱記錄的各課別是否全部已收款
+function isStudentMonthPaid(year, monthIdx) {
+    if (!currentUser || !currentUser.name || typeof window.getStudentMonthSummary !== 'function') return false;
+    const names = window.getStudentMonthSummary(currentUser.name, year, monthIdx).names;
+    return window.isIncomeRowPaid(year, monthIdx, payBaseName(), names, payStudentIncomeMap);
 }
 function payMonthKey(year, monthIdx) {
     return `${year}-${String(monthIdx + 1).padStart(2, '0')}`;
@@ -1457,18 +1249,22 @@ function payFormatTime(iso) {
 window.payFormatTime = payFormatTime;
 
 function payComputeAmount(year, monthIdx) {
-    const empty = { amount: 0, minutes: 0, completedAmount: 0, pendingAmount: 0 };
+    const empty = { amount: 0, minutes: 0, completedAmount: 0, pendingAmount: 0, parts: [] };
     if (!currentUser || !currentUser.name || typeof window.getStudentMonthSummary !== 'function') {
         return empty;
     }
     const s = window.getStudentMonthSummary(currentUser.name, year, monthIdx);
     const amount = Math.round(s.scheduled.money);
     const completedAmount = Math.round(s.completed.money);
+    const parts = Object.entries(s.byName || {})
+        .map(([name, b]) => ({ name, money: Math.round(b.scheduled.money) }))
+        .sort((a, b) => a.name.localeCompare(b.name));
     return {
         amount,
         minutes: s.scheduled.minutes,
         completedAmount,
-        pendingAmount: Math.max(0, amount - completedAmount)
+        pendingAmount: Math.max(0, amount - completedAmount),
+        parts
     };
 }
 
@@ -1715,29 +1511,34 @@ function stopStudentPaymentWatchers() {
     payUnsubStudent.forEach((fn) => fn());
     payUnsubStudent = [];
     payStudentReports = {};
-    payStudentPaidMonths = {};
+    payStudentIncomeMap = {};
 }
 
 function startStudentPaymentWatchers(studentName) {
     stopStudentPaymentWatchers();
     if (!studentName) return;
+    const base = window.baseStudentName(studentName);
 
+    // 收款紀錄：用名字開頭查詢，連同舊的「學生A(個別)」這種以完整名稱記錄的紀錄一起抓回來
     payUnsubStudent.push(onSnapshot(
-        query(collection(db, 'incomeRecords'), where('studentName', '==', studentName)),
+        query(collection(db, 'incomeRecords'),
+            where('studentName', '>=', base),
+            where('studentName', '<=', base + '\uf8ff')),
         (snap) => {
-            const paid = {};
+            const map = {};
             snap.forEach((d) => {
                 const x = d.data();
-                if (x.isPaid === true) paid[payMonthKey(x.year, x.month - 1)] = true;
+                if (!window.belongsToStudent(x.studentName, base)) return;
+                map[`${x.year}-${x.month}-${x.studentName}`] = x.isPaid === true;
             });
-            payStudentPaidMonths = paid;
+            payStudentIncomeMap = map;
             refreshStudentPaymentViews();
         },
         (err) => console.error('監聽繳費狀態失敗:', err)
     ));
 
     payUnsubStudent.push(onSnapshot(
-        query(collection(db, 'paymentReports'), where('studentName', '==', studentName)),
+        query(collection(db, 'paymentReports'), where('studentName', '==', base)),
         (snap) => {
             const reports = {};
             snap.forEach((d) => {
@@ -1767,14 +1568,12 @@ function refreshStudentPaymentViews() {
     if (payPanel && payPanel.classList.contains('active')) renderStudentPayPanel();
 }
 
-// 首頁「繳費情形」卡（以今天所在的月份為準）
 function updateHomePaymentCard() {
     const now = new Date();
     const year = now.getFullYear();
     const monthIdx = now.getMonth();
     const key = payMonthKey(year, monthIdx);
 
-    // 「本月預定費用」卡：大字是整月預定金額，小字是其中已上完的金額
     const amountEl = document.getElementById('student-class-count');
     const subEl = document.getElementById('student-class-count-sub');
     const coursesReady = Array.isArray(window.courses);
@@ -1782,7 +1581,7 @@ function updateHomePaymentCard() {
 
     if (amountEl) {
         amountEl.innerText = coursesReady ? `$${amount.toLocaleString()}` : '—';
-        amountEl.style.color = '';   // 清掉之前狀態文字留下的紅／綠色
+        amountEl.style.color = '';
     }
     if (subEl) {
         subEl.innerText = coursesReady && amount > 0
@@ -1790,13 +1589,12 @@ function updateHomePaymentCard() {
             : '';
     }
 
-    // 「本月繳費情形」卡：狀態文字改寫到自己的元素
     const statusEl = document.getElementById('student-payment-status');
     if (!statusEl) return;
     const set = (text, color) => { statusEl.innerText = text; statusEl.style.color = color; };
     const report = payStudentReports[key];
 
-    if (payStudentPaidMonths[key] === true) { set('已繳費', '#2e7d32'); return; }
+    if (isStudentMonthPaid(year, monthIdx)) { set('已繳費', '#2e7d32'); return; }
     if (report && report.status === 'reported') { set('已回報，待確認', '#e67e22'); return; }
     if (coursesReady && amount <= 0) { set('本月無費用', '#7f8c8d'); return; }
     set('未繳費', '#d32f2f');
@@ -1934,7 +1732,7 @@ function renderStudentPayPanel() {
     if (prevBtn) prevBtn.disabled = curNum <= minNum;
     if (nextBtn) nextBtn.disabled = curNum >= maxNum;
 
-    const { amount, minutes, completedAmount, pendingAmount } = payComputeAmount(payYear, payMonthIdx);
+    const { amount, minutes, completedAmount, pendingAmount, parts } = payComputeAmount(payYear, payMonthIdx);
     payCurrentAmount = amount;
 
     const amountEl = document.getElementById('pay-amount');
@@ -1943,17 +1741,23 @@ function renderStudentPayPanel() {
     if (amountEl) amountEl.innerText = `$${amount.toLocaleString()}`;
     if (hoursEl) hoursEl.innerText = `預定 ${Number((minutes / 60).toFixed(2))} 小時`;
     if (breakdownEl) {
-        breakdownEl.innerText = amount <= 0
-            ? ''
-            : (pendingAmount > 0
+        if (amount <= 0) {
+            breakdownEl.innerHTML = '';
+        } else {
+            const partsLine = parts.length > 1
+                ? `<span class="pay-breakdown-line">${parts.map(p => `${payEscape(p.name)} $${p.money.toLocaleString()}`).join('　＋　')}</span>`
+                : '';
+            const statusLine = pendingAmount > 0
                 ? `其中已上完 $${completedAmount.toLocaleString()}、尚未上 $${pendingAmount.toLocaleString()}`
-                : '這個月的課程全部已上完');
-}
+                : '這個月的課程全部已上完';
+            breakdownEl.innerHTML = `${partsLine}<span class="pay-breakdown-line">${statusLine}</span>`;
+        }
+    }
 
     const methodEl = document.getElementById('pay-method-area');
     const reportEl = document.getElementById('pay-report-area');
     const key = payMonthKey(payYear, payMonthIdx);
-    const paid = payStudentPaidMonths[key] === true;
+    const paid = isStudentMonthPaid(payYear, payMonthIdx);
     const report = payStudentReports[key] || null;
 
     if (amount <= 0) {
@@ -2015,8 +1819,8 @@ window.submitPaymentReport = async function () {
 
     submitBtn.disabled = true;
     try {
-        await setDoc(doc(db, 'paymentReports', payReportId(payYear, payMonthIdx, currentUser.name)), {
-            studentName: currentUser.name,
+        await setDoc(doc(db, 'paymentReports', payReportId(payYear, payMonthIdx, payBaseName())), {
+            studentName: payBaseName(),
             year: payYear,
             month: payMonthIdx + 1,
             amount: payCurrentAmount,

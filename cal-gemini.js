@@ -714,7 +714,7 @@ window.toggleIncomePaid = async function (studentName, checked) {
 };
 
 export function renderIncomePanel() {
-    renderIncomeTrend();   // 折線圖有自己的月份範圍，不受下面的月份切換影響
+    renderIncomeTrend();
 
     const { cur, minNum, maxNum } = clampIncomeMonth();
     const year = incomePanelYear;
@@ -739,7 +739,9 @@ export function renderIncomePanel() {
     const breakdownEl = document.getElementById('income-panel-breakdown');
     if (!breakdownEl) return;
 
-    const entries = Object.entries(monthData.studentStats).sort((a, b) => b[1].money - a[1].money);
+    // 同一位學生的「個別」「團體」等課程合併成一列
+    const grouped = groupStatsByStudent(monthData.studentStats);
+    const entries = Object.entries(grouped).sort((a, b) => b[1].money - a[1].money);
 
     if (entries.length === 0) {
         breakdownEl.innerHTML = '<p class="no-data-hint">這個月沒有教球紀錄</p>';
@@ -751,14 +753,14 @@ export function renderIncomePanel() {
     let paidIncome = 0;
     let pendingIncome = 0;
     entries.forEach(([name, data]) => {
-        if (getIncomePaidStatus(year, month, name)) paidIncome += data.money;
+        if (isIncomeRowPaid(year, month, name, data.parts.map(p => p.name))) paidIncome += data.money;
         else pendingIncome += data.money;
     });
     setText('income-panel-paid-income', `$${Math.round(paidIncome).toLocaleString()}`);
     setText('income-panel-pending-income', `$${Math.round(pendingIncome).toLocaleString()}`);
 
     breakdownEl.innerHTML = entries.map(([name, data]) => {
-        const isPaid = getIncomePaidStatus(year, month, name);
+        const isPaid = isIncomeRowPaid(year, month, name, data.parts.map(p => p.name));
         const report = typeof window.getPaymentReport === 'function'
             ? window.getPaymentReport(year, month, name)
             : null;
@@ -767,6 +769,12 @@ export function renderIncomePanel() {
 
         const safeName = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         const money = Math.round(data.money);
+
+        const partsLine = data.parts.length > 1
+            ? `<div class="income-parts">${data.parts.map(p =>
+                `${escapeHtmlText(p.name)} ${(p.mins / 60).toFixed(1)} 小時 · $${Math.round(p.money).toLocaleString()}`
+            ).join('　＋　')}</div>`
+            : '';
 
         let reportTag = '';
         if (isReported) {
@@ -793,8 +801,9 @@ export function renderIncomePanel() {
                         onchange="toggleIncomePaid('${safeName}', this.checked)">
                     <span>已收款</span>
                 </label>
-                <span class="db-name">${name}</span>
+                <span class="db-name">${escapeHtmlText(name)}</span>
                 <span class="db-meta">${(data.mins / 60).toFixed(1)} 小時 · $${money.toLocaleString()}</span>
+                ${partsLine}
                 ${reportTag}
             </div>`;
     }).join('');
@@ -1090,8 +1099,7 @@ export function renderAll() {
             if (!course) return;
 
             if (isStudent) {
-                const studentNameMatch = course.name === currentUser.name || course.studentName === currentUser.name;
-                if (!studentNameMatch) return; 
+                const studentNameMatch = belongsToStudent(course.name, currentUser.name);                if (!studentNameMatch) return; 
             }
 
             const isException = (dStr) => course.exceptions && course.exceptions.includes(dStr);
@@ -1296,7 +1304,7 @@ let studentCalendarDate = new Date();
 
 function isWorkDayForStudent(studentName, course, dStr) {
     if (dStr < STUDENT_DATA_START) return false;
-    if (!course || course.type !== 'work' || course.name !== studentName) return false;
+    if (!course || course.type !== 'work' || !belongsToStudent(course.name, studentName)) return false;
     return courseOccursOnDate(course, dStr);
 }
 
@@ -1306,18 +1314,20 @@ function getStudentCoursesOnDate(studentName, dStr) {
 }
 
 function findNextClassForStudentHome(studentName) {
-    const today = new Date();
+    const now = new Date();
     for (let i = 0; i <= 60; i++) {
-        const d = new Date(today);
-        d.setDate(today.getDate() + i);
+        const d = new Date(now);
+        d.setDate(now.getDate() + i);
         const dStr = d.toLocaleDateString('en-CA');
-        const matches = getStudentCoursesOnDate(studentName, dStr);
-        if (matches.length > 0) {
-            return { dateStr: dStr, course: matches[0] };
-        }
+        const upcoming = getStudentCoursesOnDate(studentName, dStr)
+            .filter(c => new Date(`${dStr}T${c.start}:00`) > now)
+            .sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+        if (upcoming.length > 0) return { dateStr: dStr, course: upcoming[0] };
     }
     return null;
 }
+window.findNextClassForStudentHome = findNextClassForStudentHome;
+
 
 window.findNextClassForStudentHome = findNextClassForStudentHome;
 
@@ -1379,7 +1389,8 @@ window.showStudentDayDetail = function (dStr) {
     const detailEl = document.getElementById('student-day-detail');
     if (!detailEl || !currentUser) return;
 
-    const matches = getStudentCoursesOnDate(currentUser.name, dStr);
+    const matches = getStudentCoursesOnDate(currentUser.name, dStr)
+        .sort((a, b) => (a.start || '').localeCompare(b.start || ''));
     if (matches.length === 0) {
         detailEl.innerHTML = `<p class="no-data-hint">${dStr} 沒有課程</p>`;
         return;
@@ -1387,11 +1398,8 @@ window.showStudentDayDetail = function (dStr) {
 
     detailEl.innerHTML = matches.map((c) => `
         <div class="db-row">
-            <div class="db-main">
-                <span class="db-name">${dStr}</span>
-                <span class="db-time">⏰ ${c.start}-${c.end}</span>
-            </div>
-            <span class="db-meta">📍 ${c.loc}</span>
+            <span class="db-name">${escapeHtmlText(c.name)}</span>
+            <span class="db-meta">${dStr}　⏰ ${escapeHtmlText(c.start)}-${escapeHtmlText(c.end)} · 📍 ${escapeHtmlText(c.loc)}</span>
         </div>
     `).join('');
 };
@@ -1451,11 +1459,10 @@ window.renderTodaySchedule = renderTodaySchedule;
 
 window.deleteFromModal = deleteFromModal;
 
-// 取得某位學生在日期區間內的教球課明細（由舊到新）。
-// 是否上課沿用共用規則 courseOccursOnDate，時長與費率的算法跟「本月收入」一致。
-function getStudentLessonDetails(studentName, startStr, endStr) {
+function getStudentLessonDetails(studentName, startStr, endStr, matchBase = false) {
     const studentCourses = (window.courses || courses || [])
-        .filter(c => c && c.type === 'work' && c.name === studentName);
+        .filter(c => c && c.type === 'work' &&
+            (matchBase ? belongsToStudent(c.name, studentName) : c.name === studentName));
 
     const now = new Date();
     const todayStr = now.toLocaleDateString('en-CA');
@@ -1472,6 +1479,7 @@ function getStudentLessonDetails(studentName, startStr, endStr) {
             const minutes = getCourseDurationMinutes(c);
             const rate = Number.isFinite(Number(c.price)) ? Number(c.price) : 600;
             results.push({
+                name: c.name,
                 dateStr: dStr,
                 start: c.start,
                 end: c.end,
@@ -1500,7 +1508,7 @@ let chartYear = new Date().getFullYear();
 
 function getEarliestLessonYear(studentName) {
     const years = (window.courses || courses || [])
-        .filter(c => c && c.type === 'work' && c.name === studentName && c.date)
+        .filter(c => c && c.type === 'work' && c.date && belongsToStudent(c.name, studentName))
         .map(c => parseInt(c.date.slice(0, 4), 10))
         .filter(y => Number.isFinite(y));
     return years.length ? Math.min(...years) : new Date().getFullYear();
@@ -1511,7 +1519,7 @@ function getMonthlyHoursForYear(studentName, year) {
     const range = clampToStudentStart(`${year}-01-01`, `${year}-12-31`);
     if (!range) return hours;
 
-    getStudentLessonDetails(studentName, range.start, range.end).forEach(l => {
+    getStudentLessonDetails(studentName, range.start, range.end, true).forEach(l => {
         if (!l.completed) return;
         const monthIdx = parseInt(l.dateStr.slice(5, 7), 10) - 1;
         hours[monthIdx] += l.minutes / 60;
@@ -1628,22 +1636,25 @@ window.formatHours = formatHours;
 
 function getStudentPeriodSummary(studentName, startStr, endStr) {
     const range = clampToStudentStart(startStr, endStr);
-    const lessons = range ? getStudentLessonDetails(studentName, range.start, range.end) : [];
+    const lessons = range ? getStudentLessonDetails(studentName, range.start, range.end, true) : [];
     const blank = () => ({ count: 0, minutes: 0, money: 0 });
     const completed = blank();
     const scheduled = blank();
+    const byName = {};
+
+    const add = (b, l) => { b.count += 1; b.minutes += l.minutes; b.money += l.money; };
 
     lessons.forEach(l => {
-        scheduled.count += 1;
-        scheduled.minutes += l.minutes;
-        scheduled.money += l.money;
+        if (!byName[l.name]) byName[l.name] = { completed: blank(), scheduled: blank() };
+        add(scheduled, l);
+        add(byName[l.name].scheduled, l);
         if (l.completed) {
-            completed.count += 1;
-            completed.minutes += l.minutes;
-            completed.money += l.money;
+            add(completed, l);
+            add(byName[l.name].completed, l);
         }
     });
-    return { completed, scheduled };
+
+    return { completed, scheduled, byName, names: Object.keys(byName) };
 }
 
 function getStudentMonthSummary(studentName, year, monthIdx) {
@@ -1715,12 +1726,12 @@ function getTrendMonthList(range) {
 }
 
 function computeTrendData(range) {
-    const paidMap = window.incomePaidMap || {};
     return getTrendMonthList(range).map(({ year, monthIdx }) => {
         const data = calculateMonthlyData(year, monthIdx);
+        const grouped = groupStatsByStudent(data.studentStats);
         let paid = 0;
-        Object.entries(data.studentStats).forEach(([name, s]) => {
-            if (paidMap[`${year}-${monthIdx + 1}-${name}`] === true) paid += s.money;
+        Object.entries(grouped).forEach(([base, s]) => {
+            if (isIncomeRowPaid(year, monthIdx, base, s.parts.map(p => p.name))) paid += s.money;
         });
         const income = data.totalIncome;
         return { year, monthIdx, income, paid, pending: Math.max(0, income - paid) };
@@ -1919,3 +1930,62 @@ function maybeScrollCalendarToToday() {
         header.getBoundingClientRect().left - container.getBoundingClientRect().left - offset;
 }
 window.maybeScrollCalendarToToday = maybeScrollCalendarToToday;
+
+// ------------------------------------------------------------
+// 學生姓名歸戶：「學生A(個別)」「學生A（團體）」都歸到「學生A」
+// ------------------------------------------------------------
+function baseStudentName(name) {
+    const original = String(name ?? '').trim();
+    let n = original;
+    let prev;
+    do {
+        prev = n;
+        n = n.replace(/\s*[\(（][^\)）]*[\)）]\s*$/, '').trim();
+    } while (n !== prev);
+    return n || original;
+}
+
+function belongsToStudent(courseName, studentName) {
+    return !!studentName && baseStudentName(courseName) === baseStudentName(studentName);
+}
+
+// 取出括號裡的課別文字：「學生A(團體)」→「團體」
+function courseTypeLabel(name) {
+    const m = String(name ?? '').match(/[\(（]([^\)）]*)[\)）]\s*$/);
+    return m ? m[1].trim() : '';
+}
+
+function escapeHtmlText(text) {
+    return String(text ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+}
+
+// 把 studentStats（以完整名稱為 key）合併成以「基本姓名」為 key，並保留各課別的明細
+function groupStatsByStudent(studentStats) {
+    const grouped = {};
+    Object.entries(studentStats || {}).forEach(([fullName, s]) => {
+        const base = baseStudentName(fullName);
+        if (!grouped[base]) grouped[base] = { mins: 0, money: 0, occurrences: 0, parts: [] };
+        grouped[base].mins += s.mins;
+        grouped[base].money += s.money;
+        grouped[base].occurrences += s.occurrences || 0;
+        grouped[base].parts.push({ name: fullName, mins: s.mins, money: s.money });
+    });
+    return grouped;
+}
+
+// 這一列（一位學生、一個月）是否已收款。
+// 有以基本姓名記錄的紀錄就以它為準；沒有的話（舊紀錄是以完整名稱存的），
+// 所有課別都已勾選才算已收款。map 的 key 格式：年-月(1~12)-姓名
+function isIncomeRowPaid(year, monthIdx, baseName, partNames, map) {
+    const m = map || window.incomePaidMap || {};
+    const baseKey = `${year}-${monthIdx + 1}-${baseName}`;
+    if (m[baseKey] !== undefined) return m[baseKey] === true;
+    return partNames.length > 0 && partNames.every(n => m[`${year}-${monthIdx + 1}-${n}`] === true);
+}
+
+window.baseStudentName = baseStudentName;
+window.belongsToStudent = belongsToStudent;
+window.courseTypeLabel = courseTypeLabel;
+window.isIncomeRowPaid = isIncomeRowPaid;

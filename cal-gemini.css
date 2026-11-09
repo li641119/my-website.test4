@@ -12,6 +12,15 @@
     --lc-ink: #16211E;
     --lc-ink-soft: #5B6B67;
     --lc-line: #DDD8CB;
+
+    --student-paper: #f7f6f1;
+    --student-surface: #fffefa;
+    --student-ink: #26352f;
+    --student-muted: #78837d;
+    --student-line: #dedfd6;
+    --student-green: #31594d;
+    --student-green-soft: #e9efeb;
+    --student-amber: #b77a35;
 }
 
 body { 
@@ -215,62 +224,12 @@ body {
 
 /* 登入、註冊彈窗結束 */
 
-/* 教練、學生頁面 */
-#coach-view,
-#student-view {
-    display: flex;
-    width: 100%;
-    min-height: calc(100vh - 40px);
-    gap: 18px;
-    align-items: stretch;
-}
-
-/* 上方標籤頁 */
-.coach-nav,
-.student-nav {
-    width: 100%;
-    height: 70px;
-    display: flex;
-    align-items: center;
-    padding: 0 24px;
-    background: #ffffff;
-    border-bottom: 1px solid #e5e7eb;
-    box-sizing: border-box;
-}
-
 .coach-nav-content,
 .student-nav-content {
     display: flex;
     align-items: center;
 }
 
-.coach-nav-btn,
-.student-nav-btn {
-    height: 50px;
-    padding: 0 10px;
-    border: none;
-    background: transparent;
-    color: #6b7280;
-    font-size: 15px;
-    font-weight: 500;
-    cursor: pointer;
-    transition:
-        color 0.2s ease,
-        background-color 0.2s ease;
-    white-space: nowrap;
-}
-
-.coach-nav-btn:hover,
-.student-nav-btn:hover {
-    background: #f3f7f7;
-    color: #263238;
-}
-
-.coach-nav-btn.active,
-.student-nav-btn.active {
-    background: #e8f3f1;
-    color: #098579;
-}
 
 .coach-content,
 .student-content {
@@ -518,12 +477,10 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
  }
 
 .month-calendar-header {
-    position: relative;
     display: flex;
     justify-content: center;
     align-items: center;
     margin-bottom: 20px;
-    max-width: 90%;
     gap: 20px;
 }
 
@@ -532,8 +489,6 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     grid-template-columns: minmax(0, 1fr) 300px;
     gap: 24px;
     align-items: start;
-
-    /* 覆寫原本 panel-inner 的左右外距與寬度 */
     width: auto;
     margin: 20px 40px;
 }
@@ -545,11 +500,11 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 
 .month-calendar-header button {
     border: none;
-    background: #fff;
-    border-radius: 8px;
+    background: transparent;
+    border-radius: none;
     padding: 8px 14px;
     cursor: pointer;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    box-shadow: none;
 }
 
 .flex-center {
@@ -1214,10 +1169,6 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     font-size: 15px;
 }
 
-.student-header {
-    padding: 12px 0 0;
-    width: 100%;
-}
 
 .student-lesson{
     flex: 1;
@@ -1226,50 +1177,14 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     gap: 30px;
 }
 
-.student-stat-card {
-    background: transparent;
-    border: 2px solid #E1E7ED;
-    margin-top: 10px;
-
-    padding: 10px 20px;
-    border-radius: 10px;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-}
-
-.student-stat-card .stat-sub {
-    margin-left: auto;
-    font-size: 12px;
-    color: #607d8b;
-}
-
 .student-stat-arrange{
     display: flex;
     flex-direction: row;
     align-items: flex-end;
+    gap: 2px;
+    min-width: 0;
 }
 
-.student-next-card{
-    background: transparent;
-    border-top: 1.5px solid #E2E7EB;
-    margin: 10px 0;
-
-    padding: 10px 20px;
-    border-radius: 10px;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-}
-.student-pay-card {
-    background: #f0f7ff;
-    border: 1px solid #cfe3ff;
-    padding: 10px 20px;
-    border-radius: 10px;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-}
 
 .stat-value {
     font-size: 30px;
@@ -1279,23 +1194,6 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     margin-top: 5px;
 }
 
-.student-notice-card, .student-slots-card {
-    background: transparent;
-    border-top: 1.5px solid #E2E7EB;
-    border-radius: 0;
-    box-shadow: none;
-    padding: 16px 0;
-}
-
-.student-notice-card h3, 
-.student-slots-card h3,
-.student-pay-card,
-.student-next-card {
-    margin: 0 0 5px;
-    font-size: 16px;
-    line-height: 1.5;
-    color: #586773;
-}
 
 .calendar-event-card {
     position: relative;
@@ -1424,12 +1322,24 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 .history-query-row button {
     padding: 8px 16px;
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
     background: #2c3e50;
     color: #fff;
     font-weight: 600;
     cursor: pointer;
 }
+
+#student-view .history-query-row button{
+    padding: 8px 16px;
+    border: none;
+    border-radius: 10px;
+    background: #2c3e50;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    margin: 3px 0;
+}
+
 
 .history-result {
     margin: 0 0 12px;
@@ -1531,32 +1441,6 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 }
 
 
-#logout-btn,
-#student-logout-btn{
-    margin-left: auto;
-}
-
-
-
-
-
-.student-lesson-card{
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-
-    background: #ffffff;
-    border: 2px solid #E7EBEF;
-    border-radius: 10px;
-    box-shadow: none;
-    padding: 16px 24px;
-    box-sizing: border-box;
-}
-    
-
-
-
-
 .slot-chip {
     display: inline-block;
     background: #f0f7ff;
@@ -1628,9 +1512,8 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     min-width: 0;
     overflow-y: auto;
     box-sizing: border-box;
-
-    background: #fff;
-    border-radius: 12px;
+    background: transparent;
+    border-radius: none;
     padding: 14px 16px;
 }
 
@@ -1681,8 +1564,7 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 /* 總覽：今日行程 */
 .overview-today-block {
     padding: 4px 20px 10px;
-    margin-bottom: 24px;
-    margin-top: 12px;
+    margin: 12px 0;
     background: #FFFFFF;
     border: none;
     border-radius: 10px;
@@ -1715,8 +1597,6 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     overflow-x: hidden;
     border-top: 1.5px solid #E2E7EB;
 }
-
-.today-list .today-item { border-bottom: 1px solid #f0f2f5; }
 
 .today-item {
     display: flex;
@@ -1751,18 +1631,16 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     flex: 1;
     flex-direction: column;
     max-width: 100%;
-    max-height: 70%;
+    max-height: 100%;
     align-items: center;
+    text-align: center;
 }
-
-.progress-chart-card .panel-subtitle { margin-top: 14px; }
 
 .year-switcher {
     display: flex;
     justify-content: center;
     align-items: center;
-    margin: 12px 0;
-    max-width: 90%;
+    margin: 4px 12px 0;
     gap: 20px;
 }
 
@@ -1771,7 +1649,7 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     min-height: 40px;
     border: none;
     border-radius: 8px;
-    background: #f0f2f5;
+    background: transparent;
     color: #2c3e50;
     font-size: 14px;
     cursor: pointer;
@@ -1791,7 +1669,6 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 }
 
 .chart-year-total {
-    margin-left: auto;
     font-size: 13px;
     color: #7f8c8d;
 }
@@ -1928,7 +1805,7 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 .pay-month-switcher {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 6px;
     margin-bottom: 12px;
 }
 
@@ -1937,7 +1814,7 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
     min-height: 40px;
     border: none;
     border-radius: 8px;
-    background: #f0f2f5;
+    background: transparent;
     color: #2c3e50;
     cursor: pointer;
 }
@@ -1948,7 +1825,7 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 .pay-amount-block { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 12px; }
 .pay-amount-label { font-size: 13px; color: #7f8c8d; }
 .pay-amount { font-size: 32px; font-weight: 800; color: #2c3e50; font-variant-numeric: tabular-nums; }
-.pay-hours { font-size: 13px; color: #7f8c8d; }
+.pay-hours { font-size: 13px; color: #7f8c8d; margin-left: auto;}
 
 .pay-banner { padding: 10px 14px; border-radius: 10px; font-size: 14px; font-weight: 600; }
 .pay-banner small { font-weight: 500; }
@@ -2242,15 +2119,6 @@ input[type="color"]::-moz-color-swatch {border: none;border-radius: 50%;}
 .payment-account-group .payment-settings-grid { margin-bottom: 0; }
 .payment-settings-grid .span-2 { grid-column: 1 / -1; }
 
-/* ============================================================
-   手機版排版（取代舊的所有 @media 區塊，請放在 CSS 檔案最後面）
-   原則：
-   1. JS 用 .hide / .active / style.display 切換顯示的元素，這裡一律不設定 display，
-      只調整排列方向、間距、尺寸（例如 .main-wrapper 同時是 .coach-panel，
-      一設 display 就會蓋掉分頁切換，造成行事曆在其他分頁也一直顯示）。
-   2. 用 minmax / clamp / auto-fit 做彈性寬度，不針對特定機型寫死。
-   ============================================================ */
-
 html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
@@ -2281,7 +2149,6 @@ html {
         padding-bottom: env(safe-area-inset-bottom);
     }
 
-    /* 輸入框一律 16px，iPhone 才不會在點進去時自動放大畫面 */
     input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]),
     select,
     textarea {
@@ -2292,10 +2159,8 @@ html {
         touch-action: manipulation;
     }
 
-    /* 右上角固定的登出鈕：導覽列裡已經有登出，手機版藏起來避免重疊 */
     #logout-btn { display: none !important; }
 
-    /* ---------- 登入／註冊 ---------- */
     #login-container {
         padding: 16px;
         overflow-y: auto;
@@ -2314,76 +2179,13 @@ html {
     .login-btn { min-height: 46px; }
     .toggle-pw { min-width: var(--m-tap); min-height: 36px; }
 
-    /* ---------- 導覽列（教練／學生）：固定在頂端、可左右滑、右緣有淡出提示 ---------- */
-    .coach-nav,
-    .student-nav {
-        position: sticky;
-        top: 0;
-        z-index: 60;
-        display: flex;
-        flex-wrap: nowrap;
-        gap: 8px;
-        width: 100%;
-        box-sizing: border-box;
-        padding: 10px 28px 10px var(--m-pad);
-        overflow-x: auto;
-        overflow-y: hidden;
-        -webkit-overflow-scrolling: touch;
-        overscroll-behavior-x: contain;
-        scrollbar-width: none;
-    }
-
-    .coach-nav::-webkit-scrollbar,
-    .student-nav::-webkit-scrollbar { display: none; }
-
-    /* 右緣淡出，提示「還能往右滑」 */
-    .coach-nav::after,
-    .student-nav::after {
-        content: "";
-        position: sticky;
-        right: 0;
-        flex: 0 0 22px;
-        margin-left: -22px;
-        pointer-events: none;
-    }
-    .coach-nav::after { background: linear-gradient(to right, rgba(255,255,255,0), #fff); }
-    .student-nav::after { background: linear-gradient(to right, rgba(248,249,250,0), #f8f9fa); }
-
-    .coach-nav-btn,
-    .student-nav-btn {
-        flex: 0 0 auto;
-        min-height: var(--m-tap);
-        padding: 10px 14px;
-        font-size: 14px;
-        white-space: nowrap;
-    }
-
-    /* 學生端：分頁按鈕有空間時平均撐開，空間不夠才滑動 */
-    .student-nav-btn { flex: 1 0 auto; }
-
-    .student-nav {
-        margin: 0 calc(var(--m-pad) * -1) 12px;
-        background: #f8f9fa;
-    }
-
-    /* 登出鈕做得低調一點，跟分頁按鈕區分 */
-    .coach-nav-btn[id*="logout"],
-    .student-nav-btn[id*="logout"] {
-        flex: 0 0 auto;
-        background: transparent;
-        color: #78909c;
-        border: 1px solid #cfd8dc;
-        box-shadow: none;
-    }
-
-    /* ---------- 通用分頁內容 ---------- */
     .panel-inner {
         box-sizing: border-box;
         width: 100%;
         max-width: 100%;
         min-width: 0;
         margin: 0;
-        padding: 14px var(--m-pad) 28px;
+        padding: 0 var(--m-pad) 28px;
     }
 
     .panel-title { font-size: 18px; margin-bottom: 14px; }
@@ -2566,9 +2368,6 @@ html {
 
     .overview-stats-row { flex-direction: column; gap: 12px; }
     .overview-stat-block { flex: 0 0 auto; min-width: 0; }
-
-    .overview-today-block { padding: 4px 14px 14px; margin-bottom: 18px; }
-
     .today-list {
         grid-auto-flow: row;
         grid-template-rows: none;
@@ -2631,7 +2430,7 @@ html {
 
     .history-query-row button {
         flex: 1 1 100%;
-        min-height: 46px;
+        min-height: 40px;
     }
 
     .lesson-item {
@@ -2707,26 +2506,8 @@ html {
         padding: 0 var(--m-pad) calc(24px + env(safe-area-inset-bottom));
     }
 
-    .student-header { padding: 14px 16px; margin-bottom: 12px; }
-    .student-header h2 { font-size: 18px; }
+    .student-header { padding: 14px 16px; }
 
-    .student-stats-row {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 10px;
-        margin-top: 12px;
-    }
-
-    .student-stat-card { min-width: 0; padding: 12px 14px; }
-
-    .student-stat-card .stat-value {
-        font-size: clamp(18px, 6vw, 24px);
-        overflow-wrap: anywhere;
-    }
-
-    .student-stat-card .stat-sub { font-size: 11.5px; }
-
-    /* 「下次上課」文字比較長，獨佔一整列（不支援 :has 的舊瀏覽器會忽略這條） */
     .student-stat-card:has(#student-next-class) { grid-column: 1 / -1; }
 
     .student-notice-card,
@@ -2759,11 +2540,11 @@ html {
         width: 100%;
         max-height: none;
         overflow: visible;
-        padding: 12px 14px;
+        padding: 0;
     }
 
     /* 上課紀錄、學習歷程 */
-    .progress-chart-card { padding: 4px 12px 12px; margin-bottom: 18px; }
+    .progress-chart-card { padding: 5px 12px; margin-bottom: 10px; }
     .year-switcher { flex-wrap: wrap; gap: 8px; }
 
     .year-switcher button {
@@ -2771,7 +2552,7 @@ html {
         min-height: var(--m-tap);
     }
 
-    .chart-year-total { flex: 1 1 100%; margin-left: 0; }
+    .chart-year-total { flex: 1 1 100%; }
     .history-result-row { flex-wrap: wrap; }
 
     /* 前往繳費 */
@@ -2781,6 +2562,7 @@ html {
     .pay-month-switcher button {
         min-width: var(--m-tap);
         min-height: var(--m-tap);
+        padding: 8px 0;
     }
 
     #pay-month-label { min-width: 120px; text-align: center; }
@@ -2799,108 +2581,6 @@ html {
     }
 
     .data-start-note { margin-top: 12px; }
-}
-
-/* ============================================================
-   一般手機（480px 以下）
-   ============================================================ */
-@media (max-width: 480px) {
-    .main-wrapper {
-        gap: 10px;
-        padding: 8px 8px calc(84px + env(safe-area-inset-bottom));
-    }
-
-    .panel-inner { padding: 12px 10px 24px; }
-    .sidebar { padding: 12px; }
-    .day-header { padding: 5px 2px; font-size: 11px; }
-
-    .coach-nav-btn,
-    .student-nav-btn { padding: 10px 12px; font-size: 13px; }
-
-    .time-row { flex-direction: column; gap: 0; }
-
-    .modal-content {
-        width: calc(100% - 16px);
-        max-height: 90vh;
-        max-height: 90dvh;
-        margin: 2vh auto;
-        padding: 14px;
-    }
-
-    .modal-buttons button { flex-basis: 100px; }
-
-    .floating-controls {
-        right: max(8px, env(safe-area-inset-right));
-        bottom: max(8px, env(safe-area-inset-bottom));
-    }
-
-    .floating-controls button { padding: 10px 14px; }
-    .cancel-report-btn { flex: 1 1 100%; }
-    .pay-copy-row button { flex: 1 1 calc(50% - 4px); }
-    .auth-box { padding: 22px 16px; }
-}
-
-/* ============================================================
-   小螢幕（360px 以下：iPhone SE、低階 Android）
-   ============================================================ */
-@media (max-width: 360px) {
-    .panel-inner { padding: 10px 8px 24px; }
-
-    #student-view {
-        padding-left: 8px;
-        padding-right: 8px;
-    }
-
-    .student-nav {
-        margin: 0 -8px 12px;
-        padding-left: 8px;
-    }
-
-    .coach-nav-btn,
-    .student-nav-btn { padding: 10px; font-size: 12.5px; }
-
-    .trend-range-btn { font-size: 12px; }
-    .income-summary-card .label { font-size: 12px; }
-    .month-cell { min-height: 36px; font-size: 13px; }
-    .auth-box { padding: 20px 14px; }
-}
-
-/* ============================================================
-   橫放的手機（螢幕很矮）：不要讓固定的導覽列和按鈕吃掉太多垂直空間
-   ============================================================ */
-@media (max-height: 500px) and (orientation: landscape) {
-    #logout-btn { display: none !important; }
-
-    .coach-nav,
-    .student-nav { position: static; }
-
-    .modal-content {
-        max-height: 94vh;
-        max-height: 94dvh;
-        margin: 2vh auto;
-    }
-
-    .report-modal-content {
-        max-height: 94vh;
-        max-height: 94dvh;
-    }
-
-    .floating-controls { bottom: 8px; right: 8px; }
-
-    .floating-controls button {
-        min-height: 40px;
-        padding: 8px 14px;
-    }
-
-    .auth-box { margin: auto; }
-    #login-container { overflow-y: auto; }
-    .pay-report-btn { position: static; }
-}
-
-/* ============================================================
-   手機直式修正：貼在 CSS 檔案「最最後面」
-   ============================================================ */
-@media (max-width: 768px) {
 
     /* ---- 0. 先消除「整頁比螢幕寬」，左右被切掉大多是這個原因 ---- */
     *, *::before, *::after { box-sizing: border-box; }
@@ -2918,8 +2598,6 @@ html {
         min-width: 0;
     }
 
-    /* ---- 1. 導覽列：所有分頁一次排進螢幕，不用左右滑；
-            放不下時文字自動換行，變成「圖示在上、文字在下」 ---- */
     .coach-nav,
     .student-nav {
         position: sticky;
@@ -2938,7 +2616,7 @@ html {
     .coach-nav::after,
     .student-nav::after { content: none; }   /* 取消上一份的右緣淡出 */
 
-    .coach-nav { background: #fff; border-bottom: 1px solid #eaedf1; }
+    .coach-nav,
     .student-nav { background: #f8f9fa; margin-bottom: 12px; padding: 8px 2px; }
 
     .coach-nav-btn,
@@ -2961,7 +2639,6 @@ html {
         padding: 6px 12px;
     }
 
-    /* ---- 2. 資訊總覽：直式一律單欄 ---- */
     #panel-overview .overview-stats-row,
     #panel-overview .overview-grid {
         flex-direction: column !important;
@@ -2969,8 +2646,6 @@ html {
         gap: 12px !important;
     }
 
-    /* 我看不到你現在總覽頁的 class 名稱，所以另外用「裡面放了什麼」去找外層容器
-       （:has 需要 iOS 15.4+ / Chrome 105+，舊瀏覽器會自動略過這幾條） */
     #panel-overview :is(
         :has(> .overview-income),
         :has(> * > #overview-notice-input),
@@ -2999,7 +2674,6 @@ html {
         min-height: 96px;
     }
 
-    /* 暫存／更新兩顆按鈕：並排、好按 */
     #panel-overview :has(> .overview-save-btn, > .overview-publish-btn) {
         flex-direction: row !important;
         flex-wrap: wrap;
@@ -3089,13 +2763,6 @@ html {
         flex: 1 1 100%;
     }
 
-    /* ---- 4. 學生首頁 ---- */
-    .student-stats-row {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
-    }
-
     .student-stat-card { min-width: 0; padding: 12px 14px; }
 
     /* 大字在上、小字在下，不再並排互相擠壓 */
@@ -3120,7 +2787,7 @@ html {
 
     .student-stat-card .stat-sub {
         display: block;
-        font-size: 11.5px;
+        font-size: 12px;
         line-height: 1.4;
         white-space: normal;
     }
@@ -3128,8 +2795,560 @@ html {
     #panel-student-home > * { max-width: 100%; min-width: 0; }
 }
 
+/* ============================================================
+   一般手機（480px 以下）
+   ============================================================ */
+@media (max-width: 480px) {
+    .main-wrapper {
+        gap: 10px;
+        padding: 8px 8px calc(84px + env(safe-area-inset-bottom));
+    }
+
+    .panel-inner { padding: 0 12px; }
+    .sidebar { padding: 12px; }
+    .day-header { padding: 5px 2px; font-size: 11px; }
+
+    .time-row { flex-direction: column; gap: 0; }
+
+    .modal-content {
+        width: calc(100% - 16px);
+        max-height: 90vh;
+        max-height: 90dvh;
+        margin: 2vh auto;
+        padding: 14px;
+    }
+
+    .modal-buttons button { flex-basis: 100px; }
+
+    .floating-controls {
+        right: max(8px, env(safe-area-inset-right));
+        bottom: max(8px, env(safe-area-inset-bottom));
+    }
+
+    .floating-controls button { padding: 10px 14px; }
+    .cancel-report-btn { flex: 1 1 100%; }
+    .pay-copy-row button { flex: 1 1 calc(50% - 4px); }
+    .auth-box { padding: 22px 16px; }
+}
+
+/* ============================================================
+   橫放的手機（螢幕很矮）：不要讓固定的導覽列和按鈕吃掉太多垂直空間
+   ============================================================ */
+@media (max-height: 500px) and (orientation: landscape) {
+    #logout-btn { display: none !important; }
+
+    .coach-nav,
+    .student-nav { position: static; }
+
+    .modal-content {
+        max-height: 94vh;
+        max-height: 94dvh;
+        margin: 2vh auto;
+    }
+
+    .report-modal-content {
+        max-height: 94vh;
+        max-height: 94dvh;
+    }
+
+    .floating-controls { bottom: 8px; right: 8px; }
+
+    .floating-controls button {
+        min-height: 40px;
+        padding: 8px 14px;
+    }
+
+    .auth-box { margin: auto; }
+    #login-container { overflow-y: auto; }
+    .pay-report-btn { position: static; }
+}
+
+
 /* 手機橫放（螢幕很矮）：導覽列不固定，省下垂直空間 */
 @media (max-width: 768px) and (max-height: 500px) and (orientation: landscape) {
     .coach-nav,
     .student-nav { position: static; }
+}
+
+
+#panel-student-home hr { display: none; }
+
+#panel-student-home h3 {
+    margin: 0 0 6px;
+    font-size: 15px;
+    line-height: 1.3;
+    color: #2c3e50;
+}
+
+#panel-student-home :has(> #student-name-display) {
+    padding: 0 0 5px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--student-muted, #78837d);
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.5;
+}
+
+#student-name-display {
+    margin-top: 5px;
+    color: var(--student-ink, #26352f);
+    font-size: clamp(25px, 7vw, 34px);
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: .01em;
+    overflow-wrap: anywhere;
+}
+
+#panel-student-home .student-stat-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
+
+#student-total-hours,
+#student-class-count {
+    font-size: clamp(20px, 6.4vw, 26px);
+    font-weight: 800;
+    line-height: 1.15;
+    color: #2c3e50;
+    white-space: nowrap;          /* 「0 小時」「$600」不會被拆成兩行 */
+    font-variant-numeric: tabular-nums;
+}
+
+#panel-student-home .stat-sub {
+    display: block;
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: #90a4ae;
+    white-space: normal;
+}
+
+#panel-student-home .stat-sub:empty { display: none; }
+
+#panel-student-home :has(> #student-payment-status) {
+    padding: 12px 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--student-muted, #78837d);
+}
+
+#student-payment-status {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: #f1f5f7;
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1.4;
+}
+
+#panel-student-home :has(> #student-next-class) {
+    padding: 14px 0 16px;
+    border: 0;
+    border-top: 1px solid var(--student-line, #dedfd6);
+    border-left: 0;
+    border-radius: 0;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--student-muted, #78837d);
+;
+}
+
+#panel-student-home :has(> #student-notice-content) {
+    padding: 14px 0 16px;
+    border: 0;
+    border-top: 1px solid var(--student-line, #dedfd6);
+    border-left: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+#student-notice-content {
+    white-space: pre-line;        /* 公告裡換行的地方照樣分行 */
+    overflow-wrap: anywhere;
+    display: block;
+    margin: 0;
+    color: var(--student-ink);
+    font-size: 19px;
+    font-weight: 600;
+    line-height: 1.5;
+}
+
+#panel-student-home :has(> #student-slots-content) {
+    padding: 14px 0 16px;
+    border: 0;
+    border-top: 1px solid var(--student-line, #dedfd6);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+#student-slots-content {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    text-align: left;
+    margin-top: 5px;
+}
+
+#student-slots-content .slot-chip {
+    margin: 0;
+    padding: 7px 11px;
+    font-size: 13px;
+}
+
+#student-slots-content .no-data-hint {
+    margin: 0;
+    text-align: left;
+}
+
+#student-view,
+#coach-view {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    min-height: 100vh;
+    background: var(--student-paper);
+    color: var(--student-ink);
+}
+
+/* 【修改 03｜頂部導覽列】
+   改成簡潔白底、細底線；取消原本 active 按鈕的整塊色底，改用底線標示目前分頁。 */
+#student-view .student-nav,
+#coach-view .coach-nav {
+    position: relative;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    height: auto;
+    min-height: 66px;
+    padding: 8px clamp(18px, 4vw, 48px);
+    background: var(--student-surface);
+    border: 0;
+    border-bottom: 1px solid var(--student-line);
+    box-sizing: border-box;
+}
+
+#student-view .student-nav-btn,
+#coach-view .coach-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    height: auto;
+    padding: 0 13px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: #68746d;
+    font-size: 15px;
+    font-weight: 500;
+    transition: color .16s ease, border-color .16s ease, background .16s ease;
+}
+
+#student-view .student-nav-btn:hover,
+#coach-view .coach-nav-btn:hover {
+    background: #f4f4ee;
+    color: var(--student-ink);
+}
+
+#student-view .student-nav-btn.active,
+#coach-view .coach-nav-btn.active {
+    background: transparent;
+    border-bottom-color: var(--student-green);
+    color: var(--student-green);
+    font-weight: 700;
+}
+
+#student-view #student-logout-btn,
+#coach-view #logout-btn { 
+    margin-left: auto; 
+}
+
+/* 【修改 04｜學生各分頁底色與容器】
+   統一分頁背景並避免內容高度被舊樣式固定。 */
+#student-view .student-panel {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    box-sizing: border-box;
+    background: var(--student-paper);
+}
+
+#student-view .student-panel.active { display: flex; }
+
+/* 【修改 07｜本月統計區】
+   兩個統計數字並排；移除白色卡片、圓角與陰影，以底部分隔線建立層次。 */
+/* 統計區：兩個數字並排、繳費狀態置於下方；只用分隔線而非厚重卡片 */
+#panel-student-home .student-header {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 24px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+#panel-student-home .student-lesson {
+    display: contents;
+}
+
+#panel-student-home .student-stat-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    margin-bottom: 10px;
+    padding: 12px;
+    border-radius: 10px;
+    background: #fff;
+    border: 1.5px solid #d7dfd9;
+    color: var(--student-ink);
+    box-shadow: none;
+}
+
+#panel-student-home .student-stat-card > span:first-child,
+#panel-student-home .student-pay-card > span:first-child,
+#panel-student-home .student-next-card > span:first-child,
+#panel-student-home .student-notice-card > span:first-child,
+#panel-student-home .student-slots-card > span:first-child {
+    color: var(--student-muted);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.5;
+}
+
+#panel-student-home .student-stat-card .stat-value {
+    margin: 0;
+    color: #253746;
+    font-size: clamp(23px, 7vw, 30px);
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -.035em;
+    font-variant-numeric: tabular-nums;
+}
+
+#panel-student-home .student-stat-card .stat-sub {
+    display: block;
+    margin: 0;
+    color: #929a94;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+#panel-student-home .student-stat-card .stat-sub:empty { display: none; }
+
+#panel-student-home .student-pay-card {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-width: 0;
+    padding: 20px 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--student-muted);
+    font-size: 13px;
+    font-weight: 500;
+    margin: 0;
+}
+
+#panel-student-home #student-payment-status {
+    display: inline-block;
+    margin: 0;
+    padding: 4px 10px;
+    border-radius: 3px;
+    background: var(--student-green-soft);
+    color: var(--student-green) !important;
+    font-size: 13px !important;
+    font-weight: 650;
+    line-height: 1.5;
+    white-space: normal;
+}
+
+/* 【修改 09｜下次上課、停課公告、預約時段】
+   移除厚重卡片與陰影，以頂部細線區分內容；桌機下次上課／公告左右排列，預約時段跨滿整列。 */
+/* 下次上課與公告：左右兩欄，僅以簡單標題和留白區分 */
+#panel-student-home .student-next-card,
+#panel-student-home .student-notice-card,
+#panel-student-home .student-slots-card {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 9px;
+    min-width: 0;
+    margin: 6px 0;
+    padding: 17px 0 20px;
+    border: 0;
+    border-top: 2px solid var(--student-green);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--student-ink);
+    font-size: 14px;
+    line-height: 1.6;
+    grid-column: 1 / -1;
+
+}
+
+#panel-student-home #student-next-class {
+    display: block;
+    margin: 0;
+    color: var(--student-ink);
+    font-size: 19px;
+    font-weight: 600;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+#panel-student-home #student-slots-content {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+#panel-student-home #student-slots-content .slot-chip {
+    margin: 0;
+    padding: 9px 12px;
+    border: 1px solid #d7dfd9;
+    border-radius: 8px;
+    background: #fffefa;
+    color: var(--student-ink);
+    font-size: 12px;
+}
+
+#panel-student-home #student-slots-content .slot-chip:hover {
+    border-color: var(--student-green);
+    background: var(--student-green-soft);
+}
+
+#panel-student-home #student-slots-content .no-data-hint {
+    margin: 0;
+    color: var(--student-muted);
+    text-align: left;
+}
+
+/* 【修改 11｜手機版（700px 以下）】
+   導覽列可橫向滑動；首頁改單欄，統計維持兩欄；調整各分頁的內距。 */
+@media (max-width: 700px) {
+    #student-view .student-nav {
+        gap: 0;
+        min-height: 58px;
+        width: 100vw;
+        max-width: 100vw;
+        margin-left: calc(50% - 50vw);
+        padding: 6px 12px;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        scrollbar-width: none;
+        box-sizing: border-box;
+    }
+
+    #student-view .student-nav::-webkit-scrollbar { display: none; }
+
+    #student-view .student-nav-btn {
+        flex: 0 0 auto;
+        min-height: 42px;
+        padding: 0 10px;
+        font-size: 13px;
+        white-space: nowrap;
+
+    }
+
+    #panel-student-home .panel-inner {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 14px;
+        padding: 0 20px;
+    }
+
+    #panel-student-home .panel-subtitle,
+    #panel-student-home .student-header,
+    #panel-student-home .student-slots-card {
+        grid-column: 1;
+    }
+
+    #panel-student-home .student-header {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    #panel-student-home .student-pay-card {
+        padding: 20px 0;
+        gap: 10px;
+    }
+
+    
+
+    #panel-student-home .panel-subtitle,
+    #panel-student-home .student-next-card,
+    #panel-student-home .student-notice-card,
+    #panel-student-home .student-slots-card {
+        padding: 12px 0 14px;
+    }
+
+    #student-view .student-calendar-layout,
+    #panel-student-history .panel-inner,
+    #panel-student-pay .panel-inner {
+        padding: 0 20px;
+    }
+}
+
+/* 【修改 12｜小螢幕（380px 以下）】
+   再縮小導覽按鈕、左右留白與統計標籤字級，避免窄螢幕擁擠。 */
+@media (max-width: 380px) {
+    #student-view .student-nav { padding-right: 10px; padding-left: 10px; }
+    #student-view .student-nav-btn { padding: 0 8px; font-size: 12px; }
+    #panel-student-home .panel-inner { padding-right: 15px; padding-left: 15px; }
+    #panel-student-home .student-header { gap: 0 12px; }
+    #panel-student-home .student-stat-card > span:first-child { font-size: 12px; }
+}
+
+/* 一位學生的多種課別（個別／團體）明細 */
+.income-parts {
+    flex: 1 1 100%;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #90a4ae;
+}
+
+.pay-breakdown-line { display: block; }
+
+.history-breakdown {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed #e0e0e0;
+}
+
+.history-breakdown-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 10px;
+    padding: 6px 0;
+    font-size: 13px;
+    color: #546e7a;
+}
+
+.history-breakdown-name { flex: 1 1 100%; font-weight: 700; color: #2c3e50; }
+.history-breakdown-sched { color: #90a4ae; }
+
+@media (max-width: 768px) {
+    /* 手機版學生列的排序（姓名、勾選、時數金額、課別明細、轉帳標籤） */
+    .income-student-row .income-parts { order: 3; }
 }
